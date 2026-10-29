@@ -74,120 +74,120 @@ def _pair_report(parts: dict[Category, SelectedPart]) -> RuleReport:
 
     if cpu and board:
         if not cpu.socket.strip() or not board.socket.strip():
-            report.unverified("platform_socket_unknown", "CPU or motherboard socket is blank.",
+            report.unverified("platform_socket_unknown", "Socket-ul procesorului sau al plăcii de bază lipsește din catalog.",
                               Category.CPU, Category.MOTHERBOARD)
         else:
             report.check("cpu_socket", cpu.socket == board.socket,
-                         f"CPU socket {cpu.socket} does not match motherboard socket {board.socket}.",
+                         f"Socket-ul procesorului ({cpu.socket}) nu se potrivește cu cel al plăcii de bază ({board.socket}).",
                          Category.CPU, Category.MOTHERBOARD)
         if cpu.memory_types:
             report.check("cpu_board_memory", board.memory_type in cpu.memory_types,
-                         f"CPU supports {', '.join(cpu.memory_types)}, but the motherboard uses {board.memory_type}.",
+                         f"Procesorul suportă {', '.join(cpu.memory_types)}, dar placa de bază folosește {board.memory_type}.",
                          Category.CPU, Category.MOTHERBOARD)
         else:
-            report.unverified("cpu_memory_unknown", "CPU supported memory types are missing.", Category.CPU)
+            report.unverified("cpu_memory_unknown", "Tipurile de memorie suportate de procesor lipsesc din catalog.", Category.CPU)
 
     if cpu and ram:
         if cpu.memory_types:
             report.check("cpu_ram_memory", ram.memory_type in cpu.memory_types,
-                         f"CPU supports {', '.join(cpu.memory_types)}, but RAM uses {ram.memory_type}.",
+                         f"Procesorul suportă {', '.join(cpu.memory_types)}, dar memoria RAM este {ram.memory_type}.",
                          Category.CPU, Category.RAM)
         else:
-            report.unverified("cpu_memory_unknown", "CPU supported memory types are missing.", Category.CPU)
+            report.unverified("cpu_memory_unknown", "Tipurile de memorie suportate de procesor lipsesc din catalog.", Category.CPU)
 
     if board and ram:
         report.check("board_ram_memory", board.memory_type == ram.memory_type,
-                     f"Motherboard uses {board.memory_type}, but RAM uses {ram.memory_type}.",
+                     f"Placa de bază folosește {board.memory_type}, dar memoria RAM este {ram.memory_type}.",
                      Category.MOTHERBOARD, Category.RAM)
         report.check("ram_slots", ram.modules <= board.memory_slots,
-                     f"RAM kit needs {ram.modules} slots; motherboard has {board.memory_slots}.",
+                     f"Kitul RAM are nevoie de {ram.modules} sloturi; placa de bază are {board.memory_slots}.",
                      Category.MOTHERBOARD, Category.RAM)
         report.check("ram_capacity", ram.capacity_gb <= board.max_memory_gb,
-                     f"RAM kit has {ram.capacity_gb} GB; motherboard supports at most {board.max_memory_gb} GB.",
+                     f"Kitul RAM are {ram.capacity_gb} GB; placa de bază suportă cel mult {board.max_memory_gb} GB.",
                      Category.MOTHERBOARD, Category.RAM)
 
     if board and case:
         if case.supported_board_form_factors:
             report.check("board_case_size", board.form_factor in case.supported_board_form_factors,
-                         f"Case does not list support for {board.form_factor} motherboards.",
+                         f"Carcasa nu suportă plăci de bază {board.form_factor}.",
                          Category.MOTHERBOARD, Category.CASE)
         else:
-            report.unverified("case_board_sizes_unknown", "Case supported motherboard sizes are missing.", Category.CASE)
+            report.unverified("case_board_sizes_unknown", "Formatele de placă de bază suportate de carcasă lipsesc din catalog.", Category.CASE)
 
     if gpu and case:
         report.check("gpu_length", gpu.length_mm <= case.max_gpu_length_mm,
-                     f"GPU length is {gpu.length_mm} mm; case limit is {case.max_gpu_length_mm} mm.",
+                     f"Placa video are {gpu.length_mm} mm lungime; carcasa permite cel mult {case.max_gpu_length_mm} mm.",
                      Category.GPU, Category.CASE)
 
     if psu and case:
         if psu.form_factor != case.psu_form_factor:
             # An adapter may make a smaller PSU fit; do not invent a hard conflict.
-            report.unverified("psu_case_size", f"PSU is {psu.form_factor}; case lists {case.psu_form_factor}. Verify fit and any required adapter.",
+            report.unverified("psu_case_size", f"Sursa este {psu.form_factor}, iar carcasa e pentru {case.psu_form_factor}. Verifică dacă încape și dacă e nevoie de adaptor.",
                               Category.PSU, Category.CASE)
         else:
             report.checked.append("psu_case_size")
 
     if cpu and cooler:
         if not cpu.socket.strip():
-            report.unverified("cpu_socket_unknown", "CPU socket is blank; cooler socket support cannot be checked.", Category.CPU)
+            report.unverified("cpu_socket_unknown", "Socket-ul procesorului lipsește; compatibilitatea cooler-ului nu poate fi verificată.", Category.CPU)
         elif cooler.supported_sockets:
             report.check("cooler_socket", cpu.socket in cooler.supported_sockets,
-                         f"Cooler does not list support for CPU socket {cpu.socket}.",
+                         f"Cooler-ul nu suportă socket-ul procesorului ({cpu.socket}).",
                          Category.CPU, Category.COOLER)
         else:
-            report.unverified("cooler_sockets_unknown", "Cooler supported sockets are missing.", Category.COOLER)
+            report.unverified("cooler_sockets_unknown", "Socket-urile suportate de cooler lipsesc din catalog.", Category.COOLER)
         if cooler.max_tdp_w is None:
-            report.issue("cooler_rating_unknown", "Cooler thermal rating is missing; verify cooling capacity manually.",
+            report.issue("cooler_rating_unknown", "Puterea de răcire a cooler-ului lipsește; verifică manual dacă răcește suficient.",
                          Category.CPU, Category.COOLER, severity="warning")
         elif cooler.max_tdp_w < cpu.tdp_w:
-            report.issue("cooler_thermal_rating", f"Cooler rating is {cooler.max_tdp_w} W versus CPU TDP {cpu.tdp_w} W. Verify cooling capacity; ratings are approximate.",
+            report.issue("cooler_thermal_rating", f"Cooler-ul e dat pentru {cooler.max_tdp_w} W, iar procesorul are TDP {cpu.tdp_w} W. Verifică răcirea; valorile sunt aproximative.",
                          Category.CPU, Category.COOLER, severity="warning")
 
     if cooler and case:
         if cooler.cooler_type == "air":
             if cooler.height_mm is None:
-                report.unverified("cooler_height_unknown", "Air cooler height is missing.", Category.COOLER)
+                report.unverified("cooler_height_unknown", "Înălțimea cooler-ului lipsește din catalog.", Category.COOLER)
             else:
                 report.check("cooler_height", cooler.height_mm <= case.max_cooler_height_mm,
-                             f"Cooler height is {cooler.height_mm} mm; case limit is {case.max_cooler_height_mm} mm.",
+                             f"Cooler-ul are {cooler.height_mm} mm înălțime; carcasa permite cel mult {case.max_cooler_height_mm} mm.",
                              Category.COOLER, Category.CASE)
         elif cooler.cooler_type == "aio":
             if cooler.radiator_mm is None:
-                report.unverified("radiator_size_unknown", "AIO radiator size is missing.", Category.COOLER)
+                report.unverified("radiator_size_unknown", "Dimensiunea radiatorului AIO lipsește din catalog.", Category.COOLER)
             elif case.max_radiator_mm is None:
                 # The existing catalog defines NULL as no radiator support.
                 report.check("case_radiator_unsupported", False,
-                             "Case is recorded as having no AIO radiator support.",
+                             "Carcasa nu are loc pentru radiator AIO.",
                              Category.COOLER, Category.CASE)
             elif cooler.radiator_mm > case.max_radiator_mm:
                 report.check("radiator_size", False,
-                             f"Radiator is {cooler.radiator_mm} mm; case maximum is {case.max_radiator_mm} mm.",
+                             f"Radiatorul are {cooler.radiator_mm} mm; carcasa permite cel mult {case.max_radiator_mm} mm.",
                              Category.COOLER, Category.CASE)
             else:
-                report.unverified("radiator_mounts_unverified", "Radiator is within the recorded maximum, but exact mounting sizes and clearance are not recorded.",
+                report.unverified("radiator_mounts_unverified", "Radiatorul se încadrează în dimensiunea maximă a carcasei, dar pozițiile exacte de montare nu sunt în catalog; verifică-le.",
                                   Category.COOLER, Category.CASE)
 
     if board and storage:
         if storage.storage_type == "nvme" and storage.form_factor.startswith("M.2"):
             report.check("storage_m2_slot", board.m2_slots >= 1,
-                         "Selected NVMe storage needs an M.2 slot; motherboard lists none.",
+                         "SSD-ul NVMe are nevoie de un slot M.2, iar placa de bază nu are.",
                          Category.MOTHERBOARD, Category.STORAGE)
         elif storage.storage_type == "nvme":
-            report.unverified("storage_interface_unknown", "Non-M.2 NVMe connection support is not recorded on the motherboard.",
+            report.unverified("storage_interface_unknown", "Nu se știe dacă placa de bază suportă acest tip de conectare NVMe (non-M.2).",
                               Category.MOTHERBOARD, Category.STORAGE)
         elif storage.form_factor.startswith("M.2"):
             report.check("storage_m2_slot", board.m2_slots >= 1,
-                         "Selected M.2 storage needs an M.2 slot; motherboard lists none.",
+                         "SSD-ul M.2 are nevoie de un slot M.2, iar placa de bază nu are.",
                          Category.MOTHERBOARD, Category.STORAGE)
-            report.unverified("storage_m2_sata_protocol", "M.2 SATA storage requires explicit SATA support on the M.2 slot; this is not recorded.",
+            report.unverified("storage_m2_sata_protocol", "Un SSD M.2 SATA cere suport SATA pe slotul M.2; acest lucru nu e în catalog, verifică-l.",
                               Category.MOTHERBOARD, Category.STORAGE)
         else:
             report.check("storage_sata_port", board.sata_ports >= 1,
-                         "Selected SATA storage needs a SATA port; motherboard lists none.",
+                         "Stocarea SATA are nevoie de un port SATA, iar placa de bază nu are.",
                          Category.MOTHERBOARD, Category.STORAGE)
 
     if gpu and psu:
-        report.issue("gpu_power_cables_unverified", "Verify GPU power connector types, cable counts, and adapters against the PSU; catalog data is insufficient for a complete cable check.",
+        report.issue("gpu_power_cables_unverified", "Verifică dacă sursa are conectorii de alimentare necesari plăcii video (tip și număr de cabluri); catalogul nu are destule date pentru această verificare.",
                      Category.GPU, Category.PSU, severity="warning")
 
     return report
@@ -211,7 +211,7 @@ def check_build(parts: dict[Category, SelectedPart]) -> CompatibilityResult:
             continue
         part = parts[category]
         if part.spec is None:
-            report.unverified("specifications_missing", f"Specifications for {category.value} are missing; related rules could not be checked.", category)
+            report.unverified("specifications_missing", f"Specificațiile pentru {category.value} lipsesc; regulile legate de ele nu au putut fi verificate.", category)
 
     # Fixed category order gives repeatable reports regardless of JSON key order.
     ordered = [parts[category] for category in Category if category in parts]
@@ -241,10 +241,10 @@ def check_build(parts: dict[Category, SelectedPart]) -> CompatibilityResult:
         recommended = max(recommended, gpu.recommended_psu_w)
     if psu:
         report.check("psu_capacity", psu.wattage >= draw,
-                     f"Selected parts total {draw} W; PSU capacity is {psu.wattage} W.",
+                     f"Piesele alese consumă {draw} W, dar sursa are doar {psu.wattage} W.",
                      *[category for category in Category if category in parts])
         if draw <= psu.wattage < recommended:
-            report.issue("psu_headroom", f"PSU provides {psu.wattage} W; recommended capacity for the selected parts is at least {recommended} W (20% margin and GPU recommendation).",
+            report.issue("psu_headroom", f"Sursa are {psu.wattage} W; pentru piesele alese se recomandă cel puțin {recommended} W (20% rezervă și recomandarea producătorului plăcii video).",
                          Category.PSU, severity="warning")
 
     # A known conflict takes precedence even in a partial or uncertain build.
