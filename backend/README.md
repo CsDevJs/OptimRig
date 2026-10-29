@@ -23,6 +23,9 @@ Python 3.12 or newer is recommended. Run all commands below from `backend/`.
 
    `.env` is git-ignored. The app refuses to start without `JWT_SECRET`.
 
+   Optional: set `GEMINI_API_KEY` (from <https://aistudio.google.com/apikey>) to
+   enable the AI advice endpoints. Without it they answer HTTP 503.
+
 3. Install dependencies, create the tables, and load the seed data (Linux/macOS):
 
    ```bash
@@ -62,6 +65,8 @@ Python 3.12 or newer is recommended. Run all commands below from `backend/`.
 | GET / POST | `/builds` | List your saved builds / save a new one 🔒 |
 | GET / PUT / DELETE | `/builds/{build_id}` | Read, replace or delete one of your builds 🔒 |
 | POST | `/purchase/plan` | Which store to buy each part from, at the lowest total (Min-Cost Max-Flow) |
+| POST | `/ai/budget-advice` | Gemini's advice for a budget in MDL, based on catalog prices; HTTP 503 without `GEMINI_API_KEY`, 502 if Gemini fails |
+| POST | `/ai/performance` | Gemini's performance estimate for a selection; same errors |
 
 🔒 = send `Authorization: Bearer <access_token>` from `/auth/login`.
 

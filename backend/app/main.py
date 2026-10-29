@@ -3,6 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.api.ai import router as ai_router
 from app.api.auth import router as auth_router
 from app.api.builds import router as builds_router
 from app.api.catalog import router as catalog_router
@@ -22,6 +23,7 @@ app.include_router(compatibility_router)
 app.include_router(auth_router)
 app.include_router(builds_router)
 app.include_router(purchase_router)
+app.include_router(ai_router)
 
 
 @app.get("/health", response_model=HealthRead, tags=["Health"])
