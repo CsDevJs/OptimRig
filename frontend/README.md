@@ -1,0 +1,76 @@
+# Frontend
+
+React 19 + TypeScript + Vite single-page app for the PC Configurator. It talks
+only to the FastAPI backend in `../backend`.
+
+## Run it
+
+Needs Node.js 22+ (we use 24 LTS). Start the backend first (see
+`backend/README.md`), then:
+
+```bash
+npm install
+npm run dev
+```
+
+Open <http://localhost:5173>. The dev server forwards every `/api/...` request to
+FastAPI at `http://127.0.0.1:8000` (`vite.config.ts`), so the browser sees a
+single origin and the backend needs no CORS setup in development. Point it
+elsewhere with `API_TARGET=http://host:port npm run dev`.
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Dev server with hot reload |
+| `npm run build` | Type-check (`tsc -b`) and build to `dist/` |
+| `npm run lint` | Lint with oxlint |
+| `npm run preview` | Serve the production build locally |
+
+## What the pages do
+
+The UI is in Romanian. Styling is Tailwind CSS v4 (`@tailwindcss/vite`); the
+design's colour palette and glass effects live in `src/index.css`.
+
+- **Smart (`/`)**: pick a budget and a CPU brand; the page recommends the
+  templates from `src/lib/templates.ts` that fit, with today's cheapest total.
+  The template list is temporary: TOPSIS ranking will replace it.
+- **Manual (`/manual`)**: one row per category. With "Compatibilitate auto" on,
+  each dropdown asks the AC-3 endpoint (`POST /compatibility/filter`) and hides
+  parts that no longer fit. After each change the summary calls
+  `POST /compatibility/check` (verdict, conflicts, power vs PSU) and
+  `POST /purchase/plan` (which store to buy each part from, Min-Cost Max-Flow).
+  Signed-in users can save the build, or save changes to a build they opened.
+- **Șabloane (`/sabloane`)**: the six templates with live totals and a live
+  compatibility check; "Încarcă în Manual" opens one in the manual builder.
+- **Exchange (`/exchange`)**: converter and site-wide display currency. Rates
+  are fixed and approximate (`src/lib/currencies.ts`); every real price is in MDL.
+- **Fondatori (`/fondatori`)**: the team. Clicking an avatar uploads a photo,
+  stored only in that browser.
+- **Autentificare (`/autentificare`)** and **Cont (`/cont`)**: register or sign
+  in (token in `localStorage`), then list, open or delete saved builds.
+
+The "Gemini AI" buttons (Smart and Manual) call `POST /ai/budget-advice` and
+`POST /ai/performance`. They need `GEMINI_API_KEY` in `backend/.env`; without
+it the modal says the AI is not configured.
+
+## Code layout
+
+```
+src/
+  api/          types.ts (backend response shapes), client.ts (fetch wrapper)
+  auth/         AuthContext: current user, login, register, logout
+  builder/      BuilderContext (catalog, selection, live compatibility + plan),
+                useTemplates (template totals and checks)
+  context/      CurrencyContext (display currency), ToastContext (notifications)
+  components/   Header, Logo, CategoryRow, PartLabel, PriceTag, ManualSummary,
+                BuildCard, AiModal, Flag, GlowTracker
+  pages/        Smart, Manual, Templates, Exchange, Founders, Auth, Account
+  lib/          catalog.ts (labels, icons, spec summaries), templates.ts,
+                currencies.ts
+  index.css     Tailwind theme and the design's custom classes
+```
+
+## Deploying
+
+`npm run build` produces static files in `dist/`. Serve them so that `/api` reaches
+the backend (a reverse proxy), or build with `VITE_API_BASE=https://api.example.com`
+and enable CORS for the site's origin in the backend.
