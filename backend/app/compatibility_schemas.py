@@ -2,20 +2,23 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.db.models import Category
+from app.db.models import Category, Slot
 
 
 class CompatibilityRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    components: dict[Category, Annotated[int, Field(strict=True, gt=0)]] = Field(
-        min_length=1, max_length=8,
-        description="One catalog component ID per category; partial builds are allowed.",
+    components: dict[Slot, Annotated[int, Field(strict=True, gt=0)]] = Field(
+        min_length=1, max_length=9,
+        description="One catalog component ID per slot (a category, or storage2 for a second drive); "
+                    "partial builds are allowed.",
     )
 
     @model_validator(mode="after")
     def unique_ids(self):
-        if len(set(self.components.values())) != len(self.components):
+        # Two identical drives are fine; any other part can only be used once.
+        ids = [cid for slot, cid in self.components.items() if slot != Slot.STORAGE2]
+        if len(set(ids)) != len(ids):
             raise ValueError("Each component ID can only be selected once")
         return self
 
@@ -38,15 +41,15 @@ class CompatibilityResult(BaseModel):
 
 
 class FilterRequest(CompatibilityRequest):
-    components: dict[Category, Annotated[int, Field(strict=True, gt=0)]] = Field(
-        default_factory=dict, max_length=8,
+    components: dict[Slot, Annotated[int, Field(strict=True, gt=0)]] = Field(
+        default_factory=dict, max_length=9,
         description="Fixed selections; omit to filter the whole catalog.",
     )
 
 
 class FilterResult(BaseModel):
     status: Literal["arc_consistent", "inconsistent"]
-    domains: dict[Category, list[int | None]]
-    removed: dict[Category, list[int]]
-    empty_categories: list[Category]
+    domains: dict[Slot, list[int | None]]
+    removed: dict[Slot, list[int]]
+    empty_categories: list[Slot]
     limitations: list[str]

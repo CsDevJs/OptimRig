@@ -260,6 +260,25 @@ def test_category_order_is_stable(catalog_client):
     assert order == [c.value for c in Category if c.value in order]
 
 
+def test_build_with_a_second_drive(catalog_client):
+    client, db = catalog_client
+    headers = register_and_login(client)
+    selection = am5_build(db)
+    hdd, = ids(db, "samsung-990-pro-2tb")
+    selection["storage2"] = hdd
+    body = client.post("/builds", json={"name": "Two drives", "components": selection}, headers=headers).json()
+    slots = [i["category"] for i in body["items"]]
+    assert slots.index("storage") + 1 == slots.index("storage2")
+    assert body["compatibility"]["status"] in ("compatible", "undetermined")
+    assert "storage_m2_count" in body["compatibility"]["checked_rules"]
+    # The same drive twice is a valid pair of identical drives.
+    selection["storage2"] = selection["storage"]
+    same = client.put(f"/builds/{body['id']}", json={"name": "Twins", "components": selection}, headers=headers)
+    assert same.status_code == 200 and len(same.json()["items"]) == len(selection)
+    plan = client.post("/purchase/plan", json={"components": selection}).json()
+    assert sorted(i["category"] for i in plan["items"] + plan["unplanned"]).count("storage2") == 1
+
+
 @pytest.mark.parametrize("secret", ["CHANGE_ME", "change_me", "short-secret", "x" * 31])
 def test_weak_or_placeholder_jwt_secret_is_rejected(secret):
     from pydantic import ValidationError

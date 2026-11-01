@@ -17,7 +17,8 @@ INSERT INTO stores (slug, name, website) VALUES
     ('xstore', 'Xstore', 'https://xstore.md'),
     ('neocomputer', 'NeoComputer', 'https://neocomputer.md'),
     ('darwin', 'Darwin', 'https://darwin.md'),
-    ('ultra', 'Ultra', 'https://ultra.md')
+    ('ultra', 'Ultra', 'https://ultra.md'),
+    ('primepc', 'PrimePC', 'https://prime-pc.md')
 ON CONFLICT (slug) DO UPDATE SET
     name = EXCLUDED.name,
     website = EXCLUDED.website;

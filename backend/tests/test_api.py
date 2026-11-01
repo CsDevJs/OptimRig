@@ -20,7 +20,7 @@ def test_liveness_does_not_connect_to_database(client):
 
 
 @pytest.mark.parametrize("query", [
-    "category=unknown", "tier=unknown", "limit=0", "limit=101", "offset=-1",
+    "category=unknown", "tier=unknown", "limit=0", "limit=1001", "offset=-1",
     "brand=", "brand=%20%20", "limit=abc",
 ])
 def test_invalid_filters(client, query):
@@ -52,6 +52,7 @@ def test_openapi_documents_all_spec_shapes(client):
         "/health", "/health/db", "/components", "/components/{component_id}", "/stores",
         "/compatibility/check", "/compatibility/filter",
         "/auth/register", "/auth/login", "/auth/me", "/builds", "/builds/{build_id}", "/purchase/plan",
+        "/recommendations",
     }
     assert "CpuSpecRead" in schema["components"]["schemas"]
     assert "CoolerSpecRead" in schema["components"]["schemas"]

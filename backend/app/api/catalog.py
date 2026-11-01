@@ -1,4 +1,4 @@
-"""Read the manually maintained catalog; no calls to external stores."""
+"""Read the catalog; no calls to external stores."""
 
 from typing import Annotated
 
@@ -28,7 +28,7 @@ def list_components(
     category: Category | None = None,
     tier: Tier | None = None,
     brand: Annotated[str | None, Query(min_length=1, max_length=60, pattern=r"\S")] = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> ComponentPage:
     filters = []
@@ -48,10 +48,21 @@ def list_components(
         .limit(limit)
         .offset(offset)
     ).all()
+    # Specs come with each item, so a client can load the whole catalog in a few requests.
+    specs = {}
+    for category in {c.category for c in components}:
+        model = SPEC_MODELS[category]
+        ids = [c.id for c in components if c.category == category]
+        specs.update({s.component_id: s for s in db.scalars(select(model).where(model.component_id.in_(ids)))})
     return ComponentPage(
-        items=[component_response(component) for component in components],
+        items=[_detail(component, specs.get(component.id)) for component in components],
         total=total, limit=limit, offset=offset,
     )
+
+
+def _detail(component: Component, spec) -> ComponentDetail:
+    specs = SPEC_SCHEMAS[component.category].model_validate(spec) if spec is not None else None
+    return ComponentDetail(**component_response(component).model_dump(), specs=specs)
 
 
 @router.get("/components/{component_id}", response_model=ComponentDetail)
@@ -66,9 +77,7 @@ def get_component(
     if component is None:
         raise HTTPException(status_code=404, detail="Component not found")
 
-    spec = db.get(SPEC_MODELS[component.category], component.id)
-    specs = SPEC_SCHEMAS[component.category].model_validate(spec) if spec is not None else None
-    return ComponentDetail(**component_response(component).model_dump(), specs=specs)
+    return _detail(component, db.get(SPEC_MODELS[component.category], component.id))
 
 
 @router.get("/stores", response_model=list[StoreRead])

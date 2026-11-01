@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.compatibility_schemas import CompatibilityRequest
-from app.db.models import Category
+from app.db.models import Slot
 from app.schemas import StoreRead
 
 
@@ -13,7 +13,7 @@ class PurchasePlanRequest(CompatibilityRequest):
 
 
 class PlannedItem(BaseModel):
-    category: Category
+    category: Slot
     component_id: int
     component_name: str
     store: StoreRead
@@ -22,7 +22,7 @@ class PlannedItem(BaseModel):
 
 
 class UnplannedItem(BaseModel):
-    category: Category
+    category: Slot
     component_id: int
     reason: Literal["no_offer_in_stock"]
 
