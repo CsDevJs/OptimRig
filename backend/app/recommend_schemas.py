@@ -36,4 +36,4 @@ class RecommendResult(BaseModel):
     weights: CriteriaWeights
     performance_mix: dict[Literal["cpu", "gpu"], float]
     alternatives: int = Field(description="Compatible builds within budget that were ranked")
-    builds: list[RankedBuild] = Field(description="The best-ranked build of each of the top distinct CPU chip + GPU chip pairs, best first")
+    builds: list[RankedBuild] = Field(description="Up to 6 builds, cheapest first: the best-ranked build of each of 6 price bands between the cheapest build and the budget, each with a different CPU chip + GPU chip pair")

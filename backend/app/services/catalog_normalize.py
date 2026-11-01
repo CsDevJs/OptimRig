@@ -394,6 +394,8 @@ def storage(title: str, labels: Labels) -> tuple[dict, str | None]:
     text = plain(" ".join(filter(None, [form, iface, title])))
     if any(w in text for w in ("extern", "usb", "microsd", "card", "portabil", "msata")):
         return {}, "external or card storage"
+    if re.search(r"\bsas\b|savvio", text):
+        return {}, "SAS server drive (no SAS port on desktop boards)"
     f = {}
     if any(w in text for w in ("hdd", "rpm", "об/мин", "3.5\"", "3,5", "жесткий диск", "hard disk", "disc dur")) and "ssd" not in text:
         f["storage_type"], f["form_factor"], f["interface"] = "hdd", "3.5" if "2.5" not in text else "2.5", "SATA III"

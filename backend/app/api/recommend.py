@@ -12,12 +12,11 @@ from app.services.catalog_normalize import cpu_chip
 from app.services.compatibility import SelectedPart
 from app.services.tiers import may_be_empty, pair_allowed, part_allowed
 from app.services.recommend import (
-    PERFORMANCE_MIX, WEIGHTS, Candidate, compatible_builds, criteria, prefilter, rank_builds,
+    PERFORMANCE_MIX, WEIGHTS, Candidate, compatible_builds, criteria, prefilter, rank_builds, spread_by_price,
 )
 
 router = APIRouter(tags=["Recommendations"])
 
-TOP_BUILDS = 3
 
 
 def chip(x: Candidate | None) -> str | None:
@@ -59,18 +58,18 @@ def recommend(payload: RecommendRequest, db: Annotated[Session, Depends(get_db)]
     domains = prefilter(domains, payload.budget_mdl, purpose, optional=optional, extra=rule)
     builds = list(compatible_builds(domains, payload.budget_mdl, optional, rule))
     scores = rank_builds(builds, payload.purpose)
-    # The best-ranked build of each distinct CPU chip + GPU chip pair, so the shown builds
-    # differ in more than the card maker or Box/Tray packaging.
-    ranked, seen = [], set()
-    for rank, score in enumerate(scores, start=1):
-        if len(ranked) == TOP_BUILDS:
-            break
+    # Six variants spread from cheap to near the budget, each with its own CPU chip + GPU
+    # chip pair (not just another card maker or Box/Tray packaging).
+    values = [criteria(b, payload.purpose) for b in builds]
+    pairs = [(chip(b[Slot.CPU]), chip(b[Slot.GPU])) for b in builds]
+    # When there aren't 6 new pairs (office has no GPU), other RAM or storage sizes count as variety.
+    setups = [pair + (b[Slot.RAM].part.spec.capacity_gb,
+                      sum(b[s].part.spec.capacity_gb for s in (Slot.STORAGE, Slot.STORAGE2) if b.get(s)))
+              for pair, b in zip(pairs, builds)]
+    ranked = []
+    for rank, score in spread_by_price(scores, [v[0] for v in values], pairs, payload.budget_mdl, setups=setups):
         build = builds[score.index]
-        pair = (chip(build[Slot.CPU]), chip(build[Slot.GPU]))
-        if pair in seen:
-            continue
-        seen.add(pair)
-        price, performance, power = criteria(build, payload.purpose)
+        price, performance, power = values[score.index]
         ranked.append(RankedBuild(
             rank=rank, components={c: x and x.part.component.id for c, x in build.items()},
             price_mdl=price, performance=round(performance, 2), power_w=power,

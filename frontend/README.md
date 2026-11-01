@@ -32,9 +32,10 @@ design's colour palette and glass effects live in `src/index.css`.
 
 - **Smart (`/`)**: pick a budget, a CPU brand and what the PC is for (gaming,
   office, workstation/AI, video/photo editing); the page calls
-  `POST /recommendations` and shows the three builds TOPSIS ranks best, with
-  their score, price, performance and consumption (each with a different
-  CPU chip + GPU chip pair). The purpose sets the criteria weights and the
+  `POST /recommendations` and shows six variants from cheap to near the budget
+  (the best TOPSIS-ranked build of each price band, each with a different
+  CPU chip + GPU chip pair), with their score, price, CPU, GPU, RAM, storage,
+  performance and consumption. The purpose sets the criteria weights and the
   minimum hardware for that use (see the backend README, Recommendations).
 - **Manual (`/manual`)**: one row per category, plus an optional second drive
   ("Stocare 2", picked from storage). With "Compatibilitate auto" on,

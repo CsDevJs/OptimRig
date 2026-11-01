@@ -13,6 +13,8 @@ alternatives, applied on top of compatibility:
 "Fast" NVMe = PCIe 4.0 or newer. Every purpose gets a dedicated cooler rated for at
 least 1.3x the CPU's TDP (rated coolers only; a bundled stock cooler has no rating).
 "By load" means the compatibility rules: PSU >= peak draw (and a warning below +20%).
+A PSU whose efficiency the stores don't state still counts for "80+ Gold or better";
+only a stated lower rating (Bronze, White, ...) excludes it.
 """
 
 import re
@@ -22,6 +24,8 @@ from app.services.recommend import Candidate, Purpose
 
 COOLER_HEADROOM = 1.3
 GOLD_OR_BETTER = ("80+ Gold", "80+ Platinum", "80+ Titanium")
+# What catalog_merge stores when no store lists the efficiency; not proof of a lower rating.
+NOT_STATED = "not stated"
 # Office CPUs go up to the "7" class; these model lines are above it.
 _ABOVE_CLASS_7 = re.compile(r"ryzen\s*9|threadripper|\bi9\b|i9-|ultra\s*9", re.I)
 
@@ -76,9 +80,9 @@ def part_allowed(purpose: Purpose, slot: Slot, x: Candidate) -> bool:
         if purpose == "gaming":
             return psu.wattage >= 650
         if purpose == "editing":
-            return psu.efficiency in GOLD_OR_BETTER
+            return psu.efficiency in GOLD_OR_BETTER + (NOT_STATED,)
         if purpose == "workstation":
-            return psu.wattage >= 850 and psu.efficiency in GOLD_OR_BETTER
+            return psu.wattage >= 850 and psu.efficiency in GOLD_OR_BETTER + (NOT_STATED,)
         return True
     if slot == Slot.COOLER and cooler:
         return cooler.max_tdp_w is not None

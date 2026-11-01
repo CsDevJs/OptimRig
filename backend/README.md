@@ -173,20 +173,26 @@ draw, warning below +20%). A single size ("500 GB", "1 TB") is a minimum; a rang
 is a range. Every purpose gets a dedicated cooler with a stated rating of at least
 1.3 × the CPU's TDP (a bundled stock cooler has no rating, so it doesn't count), and
 the pre-filter ranks coolers by that rating, not only by price. A PSU whose
-efficiency the stores don't state can't prove 80+ Gold, so editing and workstation
-builds don't use it.
+efficiency the stores don't state still counts for "80+ Gold or better"; only a
+stated lower rating (Bronze, White, ...) excludes it.
 
 **2. Alternatives** (`app/services/recommend.py`): the complete builds that are
 compatible, meet the purpose's requirements and cost at most the budget. The
 catalog has hundreds of parts per category, too many builds to list, so `prefilter`
-first keeps at most 5 per slot:
+first keeps about 5 per slot:
 
 1. parts with specs whose price leaves room for the cheapest part of every other category;
 2. parts not dominated (cheaper or equal, faster or equal, lower or equal draw, and
    better in one) by a part with exactly the same specs. Same specs = same
    compatibility, so a build with the dominated part is never ranked above the same
    build with the part that dominates it;
-3. the 5 that a part-level TOPSIS (same weights, the part's own price, performance
+3. the parts of cheap complete builds (`cheap_build`: per slot the cheapest part that
+   fits everything chosen so far, PSU ≥ draw + 50 W): the cheapest build overall, and
+   one for each picked CPU, so every picked CPU has parts to form a build and some
+   build fits a small budget. A slot can get a little over 5 parts this way;
+4. for CPU, GPU, RAM and the first drive, the best-ranked part of each price band of
+   the slot, so builds span from cheap to near the budget and differ in more than one part;
+5. up to 5 in total: the parts that a part-level TOPSIS (same weights, the part's own price, performance
    and draw; a cooler's rating counts as its performance) ranks best, taking spec
    groups in turn so different sockets and sizes stay represented, and only parts
    compatible with (and meeting the requirements together with) at least one part
@@ -230,12 +236,16 @@ compute each build's Euclidean distances D+ and D−, and rank by closeness
 C = D− / (D+ + D−).
 
 The response gives the `weights`, the `performance_mix`, how many `alternatives`
-were ranked, and three `builds` with their `components` (`null` = no separate
-GPU/cooler), criteria values, `distance_best`, `distance_worst` and `closeness`.
-So that the three builds differ, each one is the best-ranked build of a distinct
-CPU chip + GPU chip pair (builds that differ only in RAM, storage, case, the card
-maker or Box/Tray packaging score almost the same). `rank` is the build's position in the full TOPSIS ranking, so it can skip
-numbers. With no build within budget, `builds` is empty.
+were ranked, and up to six `builds` with their `components` (`null` = no separate
+GPU/cooler or second drive), criteria values, `distance_best`, `distance_worst` and
+`closeness`, cheapest first (`spread_by_price`). The range from the cheapest ranked
+build to the budget is split into six equal price bands, and each band shows its
+best-ranked build, so the variants run from cheap to near the budget. No two shown
+builds share a CPU chip + GPU chip pair (builds that differ only in the case, the
+card maker or Box/Tray packaging score almost the same). Empty bands are filled by
+the best-ranked builds with a new pair, then (office has no GPU) by builds with a
+new RAM or storage size. `rank` is the build's position in the full TOPSIS ranking,
+so it can skip numbers. With no build within budget, `builds` is empty.
 
 `tests/test_topsis.py` checks TOPSIS on a hand-computed example, and the build
 generator against brute force (every combination through `check_build`) on 60

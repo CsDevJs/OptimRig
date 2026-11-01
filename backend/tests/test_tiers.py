@@ -106,7 +106,8 @@ def test_workstation():
     assert part_allowed("workstation", Slot.STORAGE, drive("nvme", 2000))
     assert not part_allowed("workstation", Slot.STORAGE, drive("nvme", 4000))
     assert not part_allowed("workstation", Slot.PSU, psu(750)) and part_allowed("workstation", Slot.PSU, psu(850))
-    assert not part_allowed("workstation", Slot.PSU, psu(1000, "not stated"))
+    assert part_allowed("workstation", Slot.PSU, psu(1000, "not stated"))  # unknown is not a lower rating
+    assert not part_allowed("workstation", Slot.PSU, psu(1000, "80+ Bronze"))
 
 
 def test_cooler_needs_rating_and_headroom():
