@@ -30,10 +30,14 @@ elsewhere with `API_TARGET=http://host:port npm run dev`.
 The UI is in Romanian. Styling is Tailwind CSS v4 (`@tailwindcss/vite`); the
 design's colour palette and glass effects live in `src/index.css`.
 
-- **Smart (`/`)**: pick a budget and a CPU brand; the page recommends the
-  templates from `src/lib/templates.ts` that fit, with today's cheapest total.
-  The template list is temporary: TOPSIS ranking will replace it.
-- **Manual (`/manual`)**: one row per category. With "Compatibilitate auto" on,
+- **Smart (`/`)**: pick a budget, a CPU brand and what the PC is for (gaming,
+  office, workstation/AI, video/photo editing); the page calls
+  `POST /recommendations` and shows the three builds TOPSIS ranks best, with
+  their score, price, performance and consumption (each with a different
+  CPU chip + GPU chip pair). The purpose sets the criteria weights and the
+  minimum hardware for that use (see the backend README, Recommendations).
+- **Manual (`/manual`)**: one row per category, plus an optional second drive
+  ("Stocare 2", picked from storage). With "Compatibilitate auto" on,
   each dropdown asks the AC-3 endpoint (`POST /compatibility/filter`) and hides
   parts that no longer fit. After each change the summary calls
   `POST /compatibility/check` (verdict, conflicts, power vs PSU) and
@@ -48,10 +52,6 @@ design's colour palette and glass effects live in `src/index.css`.
 - **Autentificare (`/autentificare`)** and **Cont (`/cont`)**: register or sign
   in (token in `localStorage`), then list, open or delete saved builds.
 
-The "Gemini AI" buttons (Smart and Manual) call `POST /ai/budget-advice` and
-`POST /ai/performance`. They need `GEMINI_API_KEY` in `backend/.env`; without
-it the modal says the AI is not configured.
-
 ## Code layout
 
 ```
@@ -62,7 +62,7 @@ src/
                 useTemplates (template totals and checks)
   context/      CurrencyContext (display currency), ToastContext (notifications)
   components/   Header, Logo, CategoryRow, PartLabel, PriceTag, ManualSummary,
-                BuildCard, AiModal, Flag, GlowTracker
+                BuildCard, Flag, GlowTracker
   pages/        Smart, Manual, Templates, Exchange, Founders, Auth, Account
   lib/          catalog.ts (labels, icons, spec summaries), templates.ts,
                 currencies.ts

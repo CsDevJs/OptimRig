@@ -15,7 +15,6 @@ const TECH = [
   ['FastAPI (Python)', 'bg-emerald-400/15 border-emerald-400/30 text-emerald-200'],
   ['PostgreSQL', 'bg-violet-400/15 border-violet-400/30 text-violet-200'],
   ['AC-3 · TOPSIS · Min-Cost Max-Flow', 'bg-sky-400/15 border-sky-400/30 text-sky-200'],
-  ['Gemini AI API', 'bg-pink-400/15 border-pink-400/30 text-pink-200'],
 ]
 
 function photoKey(index: number) {

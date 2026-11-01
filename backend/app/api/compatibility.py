@@ -1,8 +1,8 @@
 from typing import Annotated
 
 from app.compatibility_schemas import FilterRequest, FilterResult
-from app.db.models import Category
-from app.services.ac3 import filter_domains
+from app.db.models import Category, Slot
+from app.services.ac3 import filter_catalog
 from app.services.compatibility import LIMITATIONS
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -29,18 +29,18 @@ def check_compatibility(payload: CompatibilityRequest, db: Annotated[Session, De
             "message": "Components not found", "component_ids": missing,
         })
     mismatches = [
-        {"component_id": component_id, "expected": category.value,
+        {"component_id": component_id, "expected": slot.category.value,
          "actual": components[component_id].category.value}
-        for category, component_id in payload.components.items()
-        if components[component_id].category != category
+        for slot, component_id in payload.components.items()
+        if components[component_id].category != slot.category
     ]
     if mismatches:
         raise HTTPException(status_code=422, detail={
             "message": "Component category mismatch", "mismatches": mismatches,
         })
     parts = {
-        category: SelectedPart(components[component_id], db.get(SPEC_MODELS[category], component_id))
-        for category, component_id in payload.components.items()
+        slot: SelectedPart(components[component_id], db.get(SPEC_MODELS[slot.category], component_id))
+        for slot, component_id in payload.components.items()
     }
     return check_build(parts)
 
@@ -53,22 +53,23 @@ def filter_compatibility(payload: FilterRequest, db: Annotated[Session, Depends(
     if missing:
         raise HTTPException(404, detail={"message": "Components not found", "component_ids": missing})
     mismatches = [
-        {"component_id": component_id, "expected": category.value,
+        {"component_id": component_id, "expected": slot.category.value,
          "actual": by_id[component_id].category.value}
-        for category, component_id in payload.components.items()
-        if by_id[component_id].category != category
+        for slot, component_id in payload.components.items()
+        if by_id[component_id].category != slot.category
     ]
     if mismatches:
         raise HTTPException(422, detail={"message": "Component category mismatch", "mismatches": mismatches})
+    specs = {category: {spec.component_id: spec for spec in db.scalars(select(model))}
+             for category, model in SPEC_MODELS.items()}
     domains = {}
-    for category, model in SPEC_MODELS.items():
-        specs = {spec.component_id: spec for spec in db.scalars(select(model))}
-        domains[category] = [SelectedPart(part, specs.get(part.id)) for part in catalog
-                             if part.category == category and
-                             (category not in payload.components or part.id == payload.components[category])]
-        if category in (Category.GPU, Category.COOLER) and category not in payload.components:
-            domains[category].append(None)
-    filtered = filter_domains(domains)
+    for slot in Slot:
+        domains[slot] = [SelectedPart(part, specs[slot.category].get(part.id)) for part in catalog
+                         if part.category == slot.category and
+                         (slot not in payload.components or part.id == payload.components[slot])]
+        if slot in (Slot.GPU, Slot.COOLER, Slot.STORAGE2) and slot not in payload.components:
+            domains[slot].append(None)
+    filtered = filter_catalog(domains)
     ids = {category: [None if part is None else part.component.id for part in values]
            for category, values in filtered.items()}
     empty = [category for category, values in ids.items() if not values]
@@ -82,5 +83,7 @@ def filter_compatibility(payload: FilterRequest, db: Annotated[Session, Depends(
             "Arc consistency is not proof of a complete valid build. Run /compatibility/check on final selections.",
             "Budget, stock, and total PSU demand are not AC-3 binary constraints.",
             "Null in a GPU or cooler domain means no separate component; CPU capabilities constrain this choice.",
+            "storage2 is an optional second drive; null means none. Two drives also need two board connectors, "
+            "which /compatibility/check verifies.",
         ],
     )

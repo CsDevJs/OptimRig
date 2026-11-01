@@ -45,6 +45,31 @@ class Category(str, enum.Enum):
     COOLER = "cooler"
 
 
+class Slot(str, enum.Enum):
+    """A place in a build: one per category, plus an optional second drive.
+
+    Values equal the category values (Slot.CPU == Category.CPU == "cpu"), so a dict
+    keyed by slots can be read with categories."""
+    CPU = "cpu"
+    MOTHERBOARD = "motherboard"
+    RAM = "ram"
+    GPU = "gpu"
+    STORAGE = "storage"
+    STORAGE2 = "storage2"
+    PSU = "psu"
+    CASE = "case"
+    COOLER = "cooler"
+
+    @property
+    def category(self) -> "Category":
+        """The component category a part in this slot belongs to."""
+        return Category.STORAGE if self is Slot.STORAGE2 else Category(self.value)
+
+
+SLOTS = tuple(Slot)
+SLOT_VALUES = tuple(s.value for s in Slot)
+
+
 class Tier(str, enum.Enum):
     LOW = "low"
     MID = "mid"
@@ -298,7 +323,7 @@ class User(Base):
 
 
 class Build(Base):
-    """A configuration a user saved. Holds at most one component per category."""
+    """A configuration a user saved. Holds at most one component per slot."""
 
     __tablename__ = "builds"
 
@@ -312,7 +337,7 @@ class Build(Base):
 
     user: Mapped[User] = relationship(back_populates="builds")
     items: Mapped[list["BuildItem"]] = relationship(
-        back_populates="build", cascade="all, delete-orphan", order_by="BuildItem.category"
+        back_populates="build", cascade="all, delete-orphan", order_by="BuildItem.slot"
     )
 
 
@@ -325,8 +350,11 @@ class BuildItem(Base):
 
     __tablename__ = "build_items"
 
+    __table_args__ = (CheckConstraint(_in("slot", SLOT_VALUES), name="build_item_slot"),)
+
     build_id: Mapped[int] = mapped_column(ForeignKey("builds.id", ondelete="CASCADE"), primary_key=True)
-    category: Mapped[Category] = mapped_column(pg_enum(Category, "component_category"), primary_key=True)
+    slot: Mapped[str] = mapped_column(String(12), primary_key=True)
+    category: Mapped[Category] = mapped_column(pg_enum(Category, "component_category"))
     # RESTRICT: a component that appears in saved builds cannot be deleted from the catalog.
     component_id: Mapped[int] = mapped_column(ForeignKey("components.id", ondelete="RESTRICT"), index=True)
     saved_price_mdl: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))

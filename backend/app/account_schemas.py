@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
 
 from app.compatibility_schemas import CompatibilityRequest, CompatibilityResult
-from app.db.models import Category
+from app.db.models import Slot
 from app.schemas import ComponentRead, StoreRead
 
 
@@ -41,7 +41,7 @@ class BuildWrite(CompatibilityRequest):
 
 
 class BuildItemRead(BaseModel):
-    category: Category
+    category: Slot = Field(description="The slot: a category, or storage2 for a second drive")
     component: ComponentRead
     saved_price_mdl: Decimal | None = Field(description="Cheapest in-stock price when this part was added")
     saved_store: StoreRead | None
@@ -61,7 +61,7 @@ class BuildSummary(BaseModel):
 class BuildRead(BuildSummary):
     items: list[BuildItemRead]
     current_total_mdl: Decimal
-    unpriced_categories: list[Category] = Field(
+    unpriced_categories: list[Slot] = Field(
         description="Parts with no in-stock offer now; excluded from current_total_mdl"
     )
     compatibility: CompatibilityResult

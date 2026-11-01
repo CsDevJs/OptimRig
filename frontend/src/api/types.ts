@@ -6,8 +6,13 @@ export type Category = (typeof CATEGORIES)[number]
 export type Tier = 'low' | 'mid' | 'high'
 export type Availability = 'in_stock' | 'on_order' | 'out_of_stock'
 
-/** One chosen component ID per category. */
-export type Selection = Partial<Record<Category, number>>
+/** A place in a build: one per category, plus an optional second drive. */
+export type Slot = Category | 'storage2'
+/** The component category a slot takes its parts from. */
+export const slotCategory = (slot: Slot): Category => (slot === 'storage2' ? 'storage' : slot)
+
+/** One chosen component ID per slot. */
+export type Selection = Partial<Record<Slot, number>>
 
 export interface Store {
   id: number
@@ -49,7 +54,7 @@ export interface ComponentDetail extends Component {
 }
 
 export interface ComponentPage {
-  items: Component[]
+  items: ComponentDetail[]
   total: number
   limit: number
   offset: number
@@ -74,29 +79,24 @@ export interface CompatibilityResult {
 
 export interface FilterResult {
   status: 'arc_consistent' | 'inconsistent'
-  domains: Partial<Record<Category, (number | null)[]>>
-  removed: Partial<Record<Category, number[]>>
-  empty_categories: Category[]
+  domains: Partial<Record<Slot, (number | null)[]>>
+  removed: Partial<Record<Slot, number[]>>
+  empty_categories: Slot[]
 }
 
 export interface PurchasePlan {
   status: 'complete' | 'partial'
   items: {
-    category: Category
+    category: Slot
     component_id: number
     component_name: string
     store: Store
     price_mdl: string
     url: string
   }[]
-  unplanned: { category: Category; component_id: number; reason: 'no_offer_in_stock' }[]
+  unplanned: { category: Slot; component_id: number; reason: 'no_offer_in_stock' }[]
   stores: { store: Store; part_count: number; subtotal_mdl: string }[]
   total_mdl: string
-}
-
-export interface AiAnswer {
-  text: string
-  model: string
 }
 
 export interface User {
@@ -122,7 +122,7 @@ export interface BuildSummary {
 
 export interface Build extends BuildSummary {
   items: {
-    category: Category
+    category: Slot
     component: Component
     saved_price_mdl: string | null
     saved_store: Store | null
@@ -130,6 +130,29 @@ export interface Build extends BuildSummary {
     current_store: Store | null
   }[]
   current_total_mdl: string
-  unpriced_categories: Category[]
+  unpriced_categories: Slot[]
   compatibility: CompatibilityResult
+}
+
+export type Purpose = 'gaming' | 'office' | 'workstation' | 'editing'
+
+/** One TOPSIS-ranked build from POST /recommendations. */
+export interface RankedBuild {
+  rank: number
+  /** null: no separate GPU or cooler, or no second drive. */
+  components: Record<Slot, number | null>
+  price_mdl: string
+  performance: number
+  power_w: number
+  distance_best: number
+  distance_worst: number
+  closeness: number
+}
+
+export interface Recommendations {
+  weights: { price: number; performance: number; power: number }
+  performance_mix: { cpu: number; gpu: number }
+  /** Compatible builds within budget that were ranked. */
+  alternatives: number
+  builds: RankedBuild[]
 }

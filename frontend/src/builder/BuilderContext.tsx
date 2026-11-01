@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { api } from '../api/client'
-import type { Category, CompatibilityResult, Component, PurchasePlan, Selection, SpecValue } from '../api/types'
+import type { CompatibilityResult, Component, PurchasePlan, Selection, Slot, SpecValue } from '../api/types'
 
 type Specs = Record<string, SpecValue> | null
 const SELECTION_KEY = 'pc-configurator-selection'
@@ -39,11 +39,9 @@ function useBuilderState() {
 
   useEffect(() => {
     api.components()
-      .then((page) => {
-        setCatalog(page.items)
-        // Specs are only on the detail endpoint; 48 small requests to our own API, once.
-        Promise.all(page.items.map((c) => api.component(c.id).then((d) => [c.id, d.specs] as const).catch(() => [c.id, null] as const)))
-          .then((entries) => setSpecs(new Map(entries)))
+      .then((items) => {
+        setCatalog(items)
+        setSpecs(new Map(items.map((c) => [c.id, c.specs])))
       })
       .catch((error: Error) => setCatalogError(error.message))
   }, [])
@@ -81,8 +79,8 @@ function useBuilderState() {
     write(BUILD_KEY, next)
   }, [])
 
-  const choose = useCallback((category: Category, id: number) => setSelection((s) => ({ ...s, [category]: id })), [])
-  const remove = useCallback((category: Category) => setSelection(({ [category]: _removed, ...rest }) => rest), [])
+  const choose = useCallback((slot: Slot, id: number) => setSelection((s) => ({ ...s, [slot]: id })), [])
+  const remove = useCallback((slot: Slot) => setSelection(({ [slot]: _removed, ...rest }) => rest), [])
   const replace = useCallback((next: Selection, loaded: LoadedBuild | null = null) => {
     setSelection(next)
     setBuild(loaded)

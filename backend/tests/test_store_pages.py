@@ -29,6 +29,9 @@ def page(name: str) -> str:
     ("darwin_oos", "1339", None, Availability.OUT_OF_STOCK),
     ("ultra_regular", "3979", None, Availability.IN_STOCK),
     ("ultra_oos", "1989", None, Availability.OUT_OF_STOCK),
+    ("primepc_regular", "20692", None, Availability.IN_STOCK),
+    ("primepc_sale", "2890", "3199", Availability.IN_STOCK),
+    ("primepc_oos", "14464", None, Availability.OUT_OF_STOCK),
 ])
 def test_real_store_pages(fixture, price, regular, availability):
     data = parse_product_page(fixture.split("_")[0], page(fixture))
@@ -60,6 +63,25 @@ def test_crossed_out_price_not_above_current_is_not_a_sale():
 def test_unexpected_pages_raise(html, message):
     with pytest.raises(PageParseError, match=message):
         parse_product_page("darwin", html)
+
+
+def test_primepc_reads_only_the_main_price_block():
+    # The quick-order dialog repeats the prices outside .product_desc. A different copy of it,
+    # moved before the main block, must not be read.
+    main, quick = page("primepc_sale").split("<!-- Quick-order modal")
+    quick = quick.replace("3199", "9999").replace('data-price="2890"', 'data-price="1"')
+    data = parse_product_page("primepc", quick + main)
+    assert (data.price, data.regular_price) == (D("2890"), D("3199"))
+
+
+@pytest.mark.parametrize("html, message", [
+    ("<html><body>No data here</body></html>", "No PrimePC price block"),
+    ('<div class="product_desc"><div class="productPrice"><b data-price=""></b></div></div>', "No number"),
+    ('<div class="product_desc"><div class="productPrice"><b data-price="0"></b></div></div>', "not positive"),
+])
+def test_unexpected_primepc_pages_raise(html, message):
+    with pytest.raises(PageParseError, match=message):
+        parse_product_page("primepc", html)
 
 
 def test_unknown_store():

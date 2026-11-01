@@ -47,3 +47,36 @@ def filter_domains(domains):
                     queue.append(arc)
                     queued.add(arc)
     return remaining
+
+
+def spec_signature(part):
+    """Every spec value of a part (None: no specs). Parts with equal signatures pass and fail
+    exactly the same rules, whatever they are paired with."""
+    if part is None:
+        return None
+    spec = part.spec
+    if spec is None:
+        return (part.component.category, "no specs")
+    return (part.component.category,) + tuple(
+        (c.name, repr(getattr(spec, c.name))) for c in spec.__table__.columns if c.name != "component_id")
+
+
+def filter_catalog(domains):
+    """filter_domains on one representative per spec signature, expanded back to all parts.
+
+    Exact, because support depends only on spec values; it keeps AC-3 fast on a catalog
+    with hundreds of parts per category."""
+    groups = {}
+    representatives = {}
+    for category, values in domains.items():
+        reps = []
+        for part in values:
+            key = (category, spec_signature(part))
+            if key not in groups:
+                groups[key] = []
+                reps.append(part)
+            groups[key].append(part)
+        representatives[category] = reps
+    filtered = filter_domains(representatives)
+    return {category: [part for rep in values for part in groups[(category, spec_signature(rep))]]
+            for category, values in filtered.items()}

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.account_schemas import BuildItemRead, BuildRead, BuildSummary, BuildWrite
 from app.api.auth import CurrentUser
 from app.api.catalog import component_response
-from app.db.models import Availability, Build, BuildItem, Category, Component, Offer, SPEC_MODELS
+from app.db.models import Availability, Build, BuildItem, Component, Offer, SPEC_MODELS, Slot
 from app.db.session import get_db
 from app.schemas import StoreRead
 from app.services.compatibility import SelectedPart, check_build
@@ -21,7 +21,7 @@ BuildId = Annotated[int, Path(gt=0)]
 _NOT_FOUND = {404: {"description": "Build not found"}}
 
 
-def load_selection(db: Session, selection: dict[Category, int]) -> dict[Category, Component]:
+def load_selection(db: Session, selection: dict[Slot, int]) -> dict[Slot, Component]:
     """Fetch the chosen components; same 404/422 errors as /compatibility/check."""
     ids = list(selection.values())
     found = {c.id: c for c in db.scalars(
@@ -32,12 +32,12 @@ def load_selection(db: Session, selection: dict[Category, int]) -> dict[Category
     if missing:
         raise HTTPException(404, detail={"message": "Components not found", "component_ids": missing})
     mismatches = [
-        {"component_id": cid, "expected": category.value, "actual": found[cid].category.value}
-        for category, cid in selection.items() if found[cid].category != category
+        {"component_id": cid, "expected": slot.category.value, "actual": found[cid].category.value}
+        for slot, cid in selection.items() if found[cid].category != slot.category
     ]
     if mismatches:
         raise HTTPException(422, detail={"message": "Component category mismatch", "mismatches": mismatches})
-    return {category: found[cid] for category, cid in selection.items()}
+    return {slot: found[cid] for slot, cid in selection.items()}
 
 
 def _cheapest_in_stock(component: Component) -> Offer | None:
@@ -45,10 +45,10 @@ def _cheapest_in_stock(component: Component) -> Offer | None:
     return min(offers, key=lambda o: (o.price_mdl, o.store_id), default=None)
 
 
-def _new_item(category: Category, component: Component) -> BuildItem:
+def _new_item(slot: Slot, component: Component) -> BuildItem:
     offer = _cheapest_in_stock(component)
     return BuildItem(
-        category=category, component=component,
+        slot=slot.value, category=slot.category, component=component,
         saved_price_mdl=offer.price_mdl if offer else None,
         saved_store=offer.store if offer else None,
     )
@@ -76,14 +76,15 @@ def _summary(build: Build) -> dict:
 
 def _build_response(db: Session, build: Build) -> BuildRead:
     items, unpriced, current_total = [], [], Decimal(0)
-    for item in build.items:
+    # Slot order (cpu, motherboard, ..., storage, storage2, ...), not alphabetical.
+    for item in sorted(build.items, key=lambda i: list(Slot).index(Slot(i.slot))):
         offer = _cheapest_in_stock(item.component)
         if offer is None:
-            unpriced.append(item.category)
+            unpriced.append(Slot(item.slot))
         else:
             current_total += offer.price_mdl
         items.append(BuildItemRead(
-            category=item.category,
+            category=Slot(item.slot),
             component=component_response(item.component),
             saved_price_mdl=item.saved_price_mdl,
             saved_store=StoreRead.model_validate(item.saved_store) if item.saved_store else None,
@@ -91,7 +92,7 @@ def _build_response(db: Session, build: Build) -> BuildRead:
             current_store=StoreRead.model_validate(offer.store) if offer else None,
         ))
     # Compatibility is recomputed on every read, so it reflects today's rules and specs.
-    parts = {i.category: SelectedPart(i.component, db.get(SPEC_MODELS[i.category], i.component_id))
+    parts = {Slot(i.slot): SelectedPart(i.component, db.get(SPEC_MODELS[i.category], i.component_id))
              for i in build.items}
     return BuildRead(
         **_summary(build), items=items, current_total_mdl=current_total,
@@ -103,7 +104,7 @@ def _build_response(db: Session, build: Build) -> BuildRead:
 def create_build(payload: BuildWrite, user: CurrentUser, db: DbSession) -> BuildRead:
     selection = load_selection(db, payload.components)
     build = Build(user=user, name=payload.name,
-                  items=[_new_item(category, component) for category, component in selection.items()])
+                  items=[_new_item(slot, component) for slot, component in selection.items()])
     db.add(build)
     db.commit()
     return _build_response(db, _owned_build(db, user.id, build.id))
@@ -128,14 +129,14 @@ def get_build(build_id: BuildId, user: CurrentUser, db: DbSession) -> BuildRead:
 def replace_build(build_id: BuildId, payload: BuildWrite, user: CurrentUser, db: DbSession) -> BuildRead:
     """Replace the name and the whole selection.
 
-    Parts that stay in the same category keep their saved price; new parts get today's.
+    Parts that stay in the same slot keep their saved price; new parts get today's.
     """
     build = _owned_build(db, user.id, build_id)
     selection = load_selection(db, payload.components)
-    kept = {(i.category, i.component_id): i for i in build.items}
+    kept = {(i.slot, i.component_id): i for i in build.items}
     build.name = payload.name
-    build.items = [kept.get((category, component.id)) or _new_item(category, component)
-                   for category, component in selection.items()]
+    build.items = [kept.get((slot.value, component.id)) or _new_item(slot, component)
+                   for slot, component in selection.items()]
     # Changing only items doesn't touch the builds row, so onupdate wouldn't fire.
     build.updated_at = func.now()
     db.commit()

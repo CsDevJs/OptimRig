@@ -1,13 +1,13 @@
 import { Check, ChevronDown, X } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
-import type { Category, Component, SpecValue } from '../api/types'
+import { slotCategory, type Component, type Slot, type SpecValue } from '../api/types'
 import { CATEGORY_INFO, cheapestOffer, ORDER } from '../lib/catalog'
 import { PartLabel } from './PartLabel'
 import { PriceTag } from './PriceTag'
 
 interface Props {
-  category: Category
+  category: Slot
   options: Component[]
   /** IDs that AC-3 says still fit; null = not filtered (auto-compat off or still loading). */
   allowed: Set<number> | null
@@ -58,7 +58,7 @@ export function CategoryRow(props: Props) {
           className="manual-custom-dropdown-btn w-full px-3.5 py-2 rounded-xl flex items-center justify-between gap-3 text-left">
           {selected ? (
             <>
-              <PartLabel category={category} component={selected} specs={specs.get(selected.id) ?? (specs.has(selected.id) ? null : undefined)} />
+              <PartLabel category={slotCategory(category)} component={selected} specs={specs.get(selected.id) ?? (specs.has(selected.id) ? null : undefined)} />
               {/* On phones the crossed-out price would squeeze the name; the % badge still shows the sale. */}
               <span className="shrink-0 max-sm:[&_s]:hidden"><PriceTag offer={cheapestOffer(selected)} /></span>
             </>
@@ -84,7 +84,7 @@ export function CategoryRow(props: Props) {
               return (
                 <button key={c.id} type="button" role="option" aria-selected={isSelected} onClick={() => onPick(c.id)}
                   className={`w-full px-3.5 py-2.5 rounded-xl flex items-center justify-between gap-3 text-left transition ${isSelected ? 'bg-violet-400/30 border border-violet-300/60 shadow-md' : 'hover:bg-white/10 border border-transparent'}`}>
-                  <PartLabel category={category} component={c} specs={specs.has(c.id) ? specs.get(c.id) : undefined} />
+                  <PartLabel category={slotCategory(category)} component={c} specs={specs.has(c.id) ? specs.get(c.id) : undefined} />
                   <span className="flex flex-col items-end shrink-0 gap-0.5">
                     <PriceTag offer={cheapestOffer(c)} />
                     <span className="text-[10px] text-slate-400">{stores ? `${stores} ${stores === 1 ? 'magazin' : 'magazine'} în stoc` : 'nu e în stoc'}</span>

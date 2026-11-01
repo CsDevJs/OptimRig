@@ -55,7 +55,7 @@ class ComponentRead(ReadModel):
 
 
 class ComponentPage(BaseModel):
-    items: list[ComponentRead]
+    items: list["ComponentDetail"]
     total: int
     limit: int
     offset: int
@@ -164,3 +164,6 @@ class ComponentDetail(ComponentRead):
 
 class HealthRead(BaseModel):
     status: str
+
+
+ComponentPage.model_rebuild()

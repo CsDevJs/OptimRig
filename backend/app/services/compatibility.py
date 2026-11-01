@@ -11,7 +11,7 @@ from typing import TypeVar
 from app.compatibility_schemas import CompatibilityIssue, CompatibilityResult
 from app.db.models import (
     Base, CaseSpec, Category, Component, CoolerSpec, CpuSpec, GpuSpec,
-    MotherboardSpec, PsuSpec, RamSpec, StorageSpec,
+    MotherboardSpec, PsuSpec, RamSpec, Slot, StorageSpec,
 )
 
 
@@ -204,9 +204,14 @@ def check_pair(left: SelectedPart, right: SelectedPart) -> tuple[list[str], list
     return report.checked, report.issues, report.unknown
 
 
-def check_build(parts: dict[Category, SelectedPart]) -> CompatibilityResult:
+def _on_m2(storage: StorageSpec) -> bool:
+    return storage.form_factor.startswith("M.2")
+
+
+def check_build(parts: dict[Slot, SelectedPart]) -> CompatibilityResult:
+    """`parts` is keyed by slot; Slot.STORAGE2 is an optional second drive."""
     report = RuleReport(parts)
-    for category in Category:
+    for category in Slot:
         if category not in parts:
             continue
         part = parts[category]
@@ -214,7 +219,7 @@ def check_build(parts: dict[Category, SelectedPart]) -> CompatibilityResult:
             report.unverified("specifications_missing", f"Specificațiile pentru {category.value} lipsesc; regulile legate de ele nu au putut fi verificate.", category)
 
     # Fixed category order gives repeatable reports regardless of JSON key order.
-    ordered = [parts[category] for category in Category if category in parts]
+    ordered = [parts[slot] for slot in Slot if slot in parts]
     for left, right in combinations(ordered, 2):
         checked, issues, unknown = check_pair(left, right)
         report.checked.extend(checked)
@@ -231,6 +236,20 @@ def check_build(parts: dict[Category, SelectedPart]) -> CompatibilityResult:
             required.add(Category.COOLER)
     missing = [category for category in Category if category in required and category not in parts]
 
+    # Each drive was checked against the board on its own; two drives also need two connectors.
+    board = _spec(parts, Category.MOTHERBOARD, MotherboardSpec)
+    drives = [p.spec for slot, p in parts.items() if slot in (Slot.STORAGE, Slot.STORAGE2) and isinstance(p.spec, StorageSpec)]
+    if board and len(drives) == 2:
+        m2 = sum(_on_m2(d) for d in drives)
+        if m2:
+            report.check("storage_m2_count", board.m2_slots >= m2,
+                         f"Cele {m2} SSD-uri M.2 au nevoie de {m2} sloturi M.2; placa de bază are {board.m2_slots}.",
+                         Category.MOTHERBOARD, Slot.STORAGE, Slot.STORAGE2)
+        if len(drives) - m2:
+            report.check("storage_sata_count", board.sata_ports >= len(drives) - m2,
+                         f"Unitățile SATA au nevoie de {len(drives) - m2} porturi SATA; placa de bază are {board.sata_ports}.",
+                         Category.MOTHERBOARD, Slot.STORAGE, Slot.STORAGE2)
+
     # PSU wattage is capacity, not consumption. Selected parts only: a partial
     # build's estimate is a lower bound, not an estimate for a finished PC.
     draw = sum(part.component.power_draw_w for category, part in parts.items() if category != Category.PSU)
@@ -242,7 +261,7 @@ def check_build(parts: dict[Category, SelectedPart]) -> CompatibilityResult:
     if psu:
         report.check("psu_capacity", psu.wattage >= draw,
                      f"Piesele alese consumă {draw} W, dar sursa are doar {psu.wattage} W.",
-                     *[category for category in Category if category in parts])
+                     *[slot for slot in Slot if slot in parts])
         if draw <= psu.wattage < recommended:
             report.issue("psu_headroom", f"Sursa are {psu.wattage} W; pentru piesele alese se recomandă cel puțin {recommended} W (20% rezervă și recomandarea producătorului plăcii video).",
                          Category.PSU, severity="warning")

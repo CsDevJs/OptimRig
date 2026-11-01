@@ -1,6 +1,6 @@
 import type {
-  AiAnswer, Build, BuildSummary, CompatibilityResult, ComponentDetail, ComponentPage, FilterResult,
-  PurchasePlan, Selection, Store, Token, User,
+  Build, BuildSummary, CompatibilityResult, ComponentDetail, ComponentPage, FilterResult,
+  Purpose, PurchasePlan, Recommendations, Selection, Store, Token, User,
 } from './types'
 
 // In development Vite forwards /api to FastAPI (see vite.config.ts).
@@ -57,7 +57,15 @@ async function request<T>(path: string, init: { method?: string; body?: unknown 
 const selectionBody = (components: Selection) => ({ components })
 
 export const api = {
-  components: () => request<ComponentPage>('/components?limit=100'),
+  /** The whole catalog, with specs, 1000 components per request. */
+  components: async () => {
+    const items: ComponentPage['items'] = []
+    for (;;) {
+      const page = await request<ComponentPage>(`/components?limit=1000&offset=${items.length}`)
+      items.push(...page.items)
+      if (!page.items.length || items.length >= page.total) return items
+    }
+  },
   component: (id: number) => request<ComponentDetail>(`/components/${id}`),
   stores: () => request<Store[]>('/stores'),
 
@@ -67,13 +75,8 @@ export const api = {
     request<FilterResult>('/compatibility/filter', { method: 'POST', body: selectionBody(selection) }),
   plan: (selection: Selection) =>
     request<PurchasePlan>('/purchase/plan', { method: 'POST', body: selectionBody(selection) }),
-
-  ai: {
-    budgetAdvice: (budget_mdl: number, brand: 'any' | 'AMD' | 'Intel') =>
-      request<AiAnswer>('/ai/budget-advice', { method: 'POST', body: { budget_mdl, brand } }),
-    performance: (selection: Selection) =>
-      request<AiAnswer>('/ai/performance', { method: 'POST', body: selectionBody(selection) }),
-  },
+  recommend: (budget_mdl: number, purpose: Purpose, cpu_brand: 'AMD' | 'Intel' | null) =>
+    request<Recommendations>('/recommendations', { method: 'POST', body: { budget_mdl, purpose, cpu_brand } }),
 
   register: (email: string, password: string) =>
     request<User>('/auth/register', { method: 'POST', body: { email, password } }),

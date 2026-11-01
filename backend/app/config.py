@@ -14,9 +14,6 @@ class Settings(BaseSettings):
     # Signs login tokens. Use a long random value; changing it logs everyone out.
     jwt_secret: str
     access_token_minutes: int = 60 * 24
-    # Optional: enables the /ai endpoints. Kept on the server so the key never reaches browsers.
-    gemini_api_key: str | None = None
-    gemini_model: str = "gemini-3.8-flash"
 
     @field_validator("jwt_secret")
     @classmethod

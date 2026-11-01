@@ -23,9 +23,6 @@ Python 3.12 or newer is recommended. Run all commands below from `backend/`.
 
    `.env` is git-ignored. The app refuses to start without `JWT_SECRET`.
 
-   Optional: set `GEMINI_API_KEY` (from <https://aistudio.google.com/apikey>) to
-   enable the AI advice endpoints. Without it they answer HTTP 503.
-
 3. Install dependencies, create the tables, and load the seed data (Linux/macOS):
 
    ```bash
@@ -65,8 +62,7 @@ Python 3.12 or newer is recommended. Run all commands below from `backend/`.
 | GET / POST | `/builds` | List your saved builds / save a new one 🔒 |
 | GET / PUT / DELETE | `/builds/{build_id}` | Read, replace or delete one of your builds 🔒 |
 | POST | `/purchase/plan` | Which store to buy each part from, at the lowest total (Min-Cost Max-Flow) |
-| POST | `/ai/budget-advice` | Gemini's advice for a budget in MDL, based on catalog prices; HTTP 503 without `GEMINI_API_KEY`, 502 if Gemini fails |
-| POST | `/ai/performance` | Gemini's performance estimate for a selection; same errors |
+| POST | `/recommendations` | The best compatible builds within a budget, ranked by TOPSIS |
 
 🔒 = send `Authorization: Bearer <access_token>` from `/auth/login`.
 
@@ -78,20 +74,22 @@ surrounding spaces. Combined filters use AND.
 Example: <http://127.0.0.1:8000/components?category=cpu&tier=low&brand=AMD&limit=10&offset=0>.
 
 The response has `items`, `total` (matching rows before pagination), `limit`
-(default 20, range 1–100), and `offset` (default 0, nonnegative). Components are
+(default 20, range 1–1000), and `offset` (default 0, nonnegative). Components are
 ordered by ID so pagination is deterministic. Invalid parameters return HTTP 422.
 
-Component details include a typed `specs` object for their category. If a manually
-entered component has no specifications yet, `specs` is `null`. A component without
+Every component, in the list and in details, includes a typed `specs` object for
+its category, so a client can load the whole catalog in a few requests. If a
+component has no specifications (some imported parts, see below), `specs` is `null`. A component without
 offers returns `offers: []`. All offers are included, including out-of-stock and
 on-order offers, ordered by price and then store ID. Each offer includes its store,
 availability, product URL, and `checked_on` date. Decimal values such as `price_mdl`
 are JSON strings (e.g. `"2499.00"`) to preserve precision. Unknown stock quantities
 are `null`, rather than zero.
 
-The API reads only from PostgreSQL; it never contacts the stores itself. Parts
-and specs are maintained in `seed/seed.sql`; prices, sales and stock can be
-refreshed from the store websites on demand with `scripts.check_offers` (below).
+The API reads only from PostgreSQL; it never contacts the stores itself. The
+hand-checked parts are in `seed/seed.sql`; every other in-stock part comes from
+`scripts.import_catalog` (below). Prices, sales and stock can be refreshed from
+the store websites on demand with `scripts.check_offers`.
 There are no automatic or scheduled updates. Catalog editing endpoints are not
 yet implemented.
 
@@ -149,6 +147,159 @@ source ──1──▶ part ──1, price──▶ store ──▶ sink
 `tests/test_purchase.py` checks the solver against brute force on 300 random
 graphs, and the planner on 500 random purchase cases.
 
+## Recommendations (TOPSIS)
+
+`POST /recommendations` takes a budget, what the PC is for, and optionally a CPU brand:
+
+```json
+{"budget_mdl": 55000, "purpose": "gaming", "cpu_brand": "AMD"}
+```
+
+`purpose` is `gaming`, `office`, `workstation` or `editing`; `cpu_brand` is
+`AMD`, `Intel` or omitted.
+
+**1. Requirements per purpose** (`app/services/tiers.py`, the baseline tier
+reference). Hard filters on every alternative, on top of compatibility:
+
+| Purpose | CPU | GPU | RAM | Storage | PSU |
+|---|---|---|---|---|---|
+| office | ≥ 4 cores / 8 threads, integrated graphics, up to Ryzen 7 / Core i7 / Core Ultra 7 | none (integrated) | 8–16 GB | one 256–512 GB M.2 SSD (NVMe or SATA) | by load |
+| gaming | ≥ 6 cores / 12 threads | ≥ 6 GB VRAM | 16–32 GB | SSD ≥ 500 GB + HDD 500 GB–1 TB, or one fast NVMe ≥ 1 TB | ≥ 650 W |
+| editing | 8–16 cores | ≥ 12 GB VRAM | 32–64 GB | NVMe ≥ 512 GB + fast NVMe ≥ 2 TB | 80+ Gold or better |
+| workstation | ≥ 8 cores / 16 threads | ≥ 8 GB VRAM | ≥ 32 GB (≥ 64 GB with a 24 GB+ GPU) | one fast NVMe 1–2 TB | ≥ 850 W, 80+ Gold or better |
+
+"Fast" NVMe = PCIe 4.0 or newer. "By load" = the compatibility rules (PSU ≥ peak
+draw, warning below +20%). A single size ("500 GB", "1 TB") is a minimum; a range
+is a range. Every purpose gets a dedicated cooler with a stated rating of at least
+1.3 × the CPU's TDP (a bundled stock cooler has no rating, so it doesn't count), and
+the pre-filter ranks coolers by that rating, not only by price. A PSU whose
+efficiency the stores don't state can't prove 80+ Gold, so editing and workstation
+builds don't use it.
+
+**2. Alternatives** (`app/services/recommend.py`): the complete builds that are
+compatible, meet the purpose's requirements and cost at most the budget. The
+catalog has hundreds of parts per category, too many builds to list, so `prefilter`
+first keeps at most 5 per slot:
+
+1. parts with specs whose price leaves room for the cheapest part of every other category;
+2. parts not dominated (cheaper or equal, faster or equal, lower or equal draw, and
+   better in one) by a part with exactly the same specs. Same specs = same
+   compatibility, so a build with the dominated part is never ranked above the same
+   build with the part that dominates it;
+3. the 5 that a part-level TOPSIS (same weights, the part's own price, performance
+   and draw; a cooler's rating counts as its performance) ranks best, taking spec
+   groups in turn so different sockets and sizes stay represented, and only parts
+   compatible with (and meeting the requirements together with) at least one part
+   already picked for each earlier slot (CPU, board, RAM, GPU, PSU, case, cooler,
+   storage, second drive).
+
+8 per category was tried first; real store data is so compatible that it gave up to
+6 million builds and 20 s to 7 minutes per request.
+
+AC-3 then prunes these domains, and backtracking with forward checking picks one part per category,
+dropping a branch as soon as a later category has no compatible part left or the
+cheapest remaining parts would exceed the budget. A build is kept only when
+`/compatibility/check` would call it `compatible`: no failed rule, no rule left
+unresolved by missing data (so AIO coolers, whose radiator mounts are always
+"to verify", are not used), and a PSU at least as large as the recorded peak draw.
+The GPU is left out only for office (the CPU then must have graphics); the second
+drive only where the purpose allows one drive; two drives need two connectors of
+their kind on the board. Only parts with an in-stock offer are used.
+
+**3. Criteria**, one decision-matrix row per build:
+
+| Criterion | Value | Goal |
+|---|---|---|
+| Price | sum of each part's cheapest in-stock offer (what `/purchase/plan` pays) | min |
+| Performance | CPU share × CPU `perf_score` + GPU share × GPU `perf_score` (0 without a GPU) | max |
+| Consumption | sum of recorded peak draw, PSU excluded (`estimated_power_w`) | min |
+
+**4. Weights** (non-negative, each row sums to 1) and the performance mix:
+
+| Purpose | Price | Performance | Consumption | CPU / GPU in performance |
+|---|---|---|---|---|
+| gaming | 0.35 | 0.50 | 0.15 | 0.5 / 0.5 |
+| office | 0.60 | 0.20 | 0.20 | 0.7 / 0.3 |
+| workstation | 0.25 | 0.60 | 0.15 | 0.5 / 0.5 |
+| editing | 0.30 | 0.55 | 0.15 | 0.6 / 0.4 |
+
+**5. TOPSIS** (`app/services/topsis.py`): vector-normalize each column
+(r = x / √Σx²), multiply by the weights, take the ideal (A+) and anti-ideal (A−)
+value per criterion (max/min for performance, min/max for price and consumption),
+compute each build's Euclidean distances D+ and D−, and rank by closeness
+C = D− / (D+ + D−).
+
+The response gives the `weights`, the `performance_mix`, how many `alternatives`
+were ranked, and three `builds` with their `components` (`null` = no separate
+GPU/cooler), criteria values, `distance_best`, `distance_worst` and `closeness`.
+So that the three builds differ, each one is the best-ranked build of a distinct
+CPU chip + GPU chip pair (builds that differ only in RAM, storage, case, the card
+maker or Box/Tray packaging score almost the same). `rank` is the build's position in the full TOPSIS ranking, so it can skip
+numbers. With no build within budget, `builds` is empty.
+
+`tests/test_topsis.py` checks TOPSIS on a hand-computed example, and the build
+generator against brute force (every combination through `check_build`) on 60
+random catalogs; `tests/test_catalog_import.py` checks the pre-filter. A request
+ranks up to about 270,000 builds and takes 1–3 s.
+
+## Importing every in-stock part from the stores
+
+```bash
+.venv/bin/python -m scripts.seed                    # stores (incl. PrimePC) and hand-checked parts
+.venv/bin/python -m scripts.import_catalog crawl    # store pages -> .crawl-cache/products.json
+.venv/bin/python -m scripts.import_catalog load     # -> components, specs, offers in the database
+```
+
+`crawl xstore darwin` crawls only those stores (the others' saved products are kept).
+Nothing runs automatically.
+
+**Crawling** (`scripts/import_catalog.py`, Crawlee): each store's category listings,
+page by page (`?page=N`), then every product page. Neocomputer's robots.txt forbids
+`?page=`, so its products come from its product sitemap, filtered by keywords, and
+the breadcrumb on each page decides the category. Each store runs in its own
+process. Politeness: robots.txt is followed with its `*` and `$` wildcards
+(`scripts/crawl.py`; Python's own parser ignores them), at most one request every
+0.5 s per store, the project's User-Agent, and a page cache (`.crawl-cache/`,
+git-ignored), so a rerun only asks for new pages. Neocomputer stopped answering at
+0.5 s, so it gets one request every 3 s.
+
+**Specs** (`app/services/catalog_normalize.py`): each store names its specs
+differently, in Romanian or Russian; a field is found by label keywords, then by
+the title. Skipped: laptop/server memory, DDR3 platforms, external storage and
+memory cards, cases with a built-in PSU, TFX/Flex PSUs, case fans and accessories.
+Pages of the same product are merged (by part number; CPUs by model + Box/Tray),
+with the cheapest page per store. Missing values are filled, in this order
+(`app/services/catalog_merge.py`):
+
+1. the value most of the product's pages agree on;
+2. platform facts: an AM5/LGA1851 CPU uses DDR5, AM4/LGA1200 DDR4, LGA1700 both;
+   Intel "F" CPUs have no graphics; a Tray CPU, or one whose cooler isn't stated,
+   is treated as coming without a cooler (the build then requires one);
+3. PassMark's chip page: CPU cores, threads, clocks and TDP; GPU TDP;
+4. other cards with the same GPU chip: median TDP, recommended PSU and thickness;
+   if no store gives a card's length, the longest card with that chip;
+5. the manufacturer's page linked by the store: case maximum GPU length
+   (PrimePC doesn't list it). be quiet! answers crawlers with HTTP 403, so its
+   cases stay without it;
+6. fields no rule reads: a board's maximum memory from its slots (32 GB per DDR4
+   slot, 64 GB per DDR5), unstated PSU efficiency/modularity, unstated case fans (0).
+
+A product still missing a required spec is saved without specs: it can be chosen
+in the manual configurator (with a "specifications missing" warning), and TOPSIS
+skips it. `.crawl-cache/import-report.json` lists these products, every filled
+value with its source, and the skipped pages.
+
+**Performance scores**: CPUs and GPUs, imported and hand-entered alike, get
+`perf_score` = PassMark mark / best mark in the catalog × 100 (CPU Mark, G3D Mark),
+from PassMark's chart pages. `perf_source` shows the numbers. **Power draw** follows
+the seed's convention: CPU maximum package power (AMD 1.35 × TDP, Intel PL2 by TDP
+class), GPU board power, small fixed values for the other parts. **Tier** is the
+price third within the category.
+
+A product whose page is already an offer of a component is that component: it gets
+the new offers. Parts from `seed/seed.sql` keep their hand-checked specs; imported
+parts get the specs of the latest run.
+
 ## Updating prices, sales and stock from the stores
 
 Run this whenever you want fresh data (nothing runs automatically):
@@ -166,8 +317,11 @@ null), `availability` and `checked_on`, then prints what changed:
 Done: 171 ok (82 changed), 0 failed, 0 page gone.
 ```
 
-- **Where the data comes from:** all four stores embed schema.org Product data
-  (current price and availability) in their pages. The sale's regular price is
+- **Where the data comes from:** Xstore, NeoComputer, Darwin and Ultra embed
+  schema.org Product data (current price and availability) in their pages.
+  PrimePC doesn't, so its price and stock are read from the page's HTML: the
+  "Цена:" price block when the product can be bought, the "Последняя цена
+  продажи:" (last selling price) block when it is out of stock. The sale's regular price is
   read from the crossed-out price in each store's price block
   (`app/services/store_pages.py`).
 - **Being polite:** the script follows each store's robots.txt, waits 2 seconds
@@ -198,8 +352,8 @@ Send a JSON object to `POST /compatibility/check`. Obtain component IDs from
 }
 ```
 
-The MVP accepts one component per category: one RAM kit and one storage device.
-Partial builds are allowed, but at least one selection is required. IDs must be
+Keys are slots: one per category, plus `storage2` for an optional second drive
+(a storage component; it may be the same drive as `storage`). Partial builds are allowed, but at least one selection is required. IDs must be
 positive JSON integers; duplicate IDs, unknown categories, extra request fields,
 and a component selected under the wrong category return HTTP 422. IDs absent
 from the catalog return HTTP 404. A valid request returns HTTP 200 even when the
@@ -235,7 +389,7 @@ Implemented rules:
 | RAM | Kit module count versus available slots; kit capacity versus board maximum |
 | Case | Motherboard form factor; GPU length; air cooler height |
 | Cooling | Cooler socket support; AIO maximum radiator size; advisory thermal rating |
-| Storage | M.2 slot for M.2 NVMe; SATA port for non-M.2 SATA storage |
+| Storage | M.2 slot for M.2 NVMe; SATA port for non-M.2 SATA storage; with two drives, enough M.2 slots and SATA ports for both |
 | Power | Selected peak draw versus PSU wattage; recommended capacity with margin |
 
 Unknown specifications and empty supported-value lists produce warnings and
@@ -256,7 +410,7 @@ Radiator fit also depends on dimensions and mounting arrangements; see
 Rule code lives in `app/services/compatibility.py`, independently of HTTP/database
 access. Binary rules are available through `check_pair` for later AC-3 reuse;
 build completeness and total power are checked separately by `check_build`.
-Recommendation generation, Min-Cost Max-Flow, and TOPSIS are future milestones.
+Min-Cost Max-Flow and TOPSIS are described in their own sections.
 The check endpoint validates an existing selection; AC-3 filtering is described below.
 
 ## Tests

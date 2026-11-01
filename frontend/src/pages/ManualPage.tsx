@@ -1,12 +1,11 @@
-import { Eraser, Gauge } from 'lucide-react'
+import { Eraser } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { api } from '../api/client'
-import type { AiAnswer, Category, Selection } from '../api/types'
+import { slotCategory, type Selection, type Slot } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { useBuilder } from '../builder/BuilderContext'
-import { AiModal } from '../components/AiModal'
 import { CategoryRow } from '../components/CategoryRow'
 import { ManualSummary } from '../components/ManualSummary'
 import { useToast } from '../context/ToastContext'
@@ -20,7 +19,7 @@ export function ManualPage() {
   const { user } = useAuth()
   const toast = useToast()
   const navigate = useNavigate()
-  const [open, setOpen] = useState<Category | null>(null)
+  const [open, setOpen] = useState<Slot | null>(null)
   const [auto, setAuto] = useState(() => {
     try {
       return localStorage.getItem(AUTO_KEY) !== 'off'
@@ -28,7 +27,6 @@ export function ManualPage() {
       return true
     }
   })
-  const [aiAsk, setAiAsk] = useState<(() => Promise<AiAnswer>) | null>(null)
 
   // AC-3 on the server for the open row: which parts still fit everything else that's picked.
   const others = useMemo<Selection>(() => {
@@ -107,11 +105,6 @@ export function ManualPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" disabled={!selection.cpu && !selection.gpu}
-            onClick={() => setAiAsk(() => () => api.ai.performance(selection))}
-            className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-400/20 to-sky-400/20 hover:from-emerald-400/30 hover:to-sky-400/30 border border-emerald-400/40 text-emerald-200 text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-40">
-            <Gauge size={14} className="text-emerald-300" /> Analizează FPS & performanță (Gemini AI)
-          </button>
           <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-slate-200 cursor-pointer hover:border-slate-500 transition">
             <input type="checkbox" checked={auto} onChange={toggleAuto} className="accent-violet-400" />
             Compatibilitate auto
@@ -136,7 +129,7 @@ export function ManualPage() {
               <CategoryRow
                 key={category}
                 category={category}
-                options={(catalog ?? []).filter((c) => c.category === category)}
+                options={(catalog ?? []).filter((c) => c.category === slotCategory(category))}
                 allowed={allowed}
                 loadingAllowed={open === category && loadingAllowed}
                 selected={id ? byId.get(id) ?? null : null}
@@ -166,11 +159,6 @@ export function ManualPage() {
           />
         </div>
       </div>
-
-      {aiAsk && (
-        <AiModal title="Gemini AI: benchmark & analiză FPS" loadingText="Se estimează performanța configurației alese..."
-          ask={aiAsk} onClose={() => setAiAsk(null)} />
-      )}
     </section>
   )
 }
