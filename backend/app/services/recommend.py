@@ -151,6 +151,9 @@ MAX_PARTS_PER_CATEGORY = 5
 # Order in which slots get their parts; each later pick must fit an earlier pick.
 PICK_ORDER = [Slot.CPU, Slot.MOTHERBOARD, Slot.RAM, Slot.GPU, Slot.PSU,
               Slot.CASE, Slot.COOLER, Slot.STORAGE, Slot.STORAGE2]
+# Slots whose picks are spread over their price range (see prefilter step 4): CPU and GPU
+# set a build's price level; RAM and drive sizes make the variants differ for office too.
+PRICE_SPREAD_SLOTS = (Slot.CPU, Slot.GPU, Slot.RAM, Slot.STORAGE)
 
 
 def _dominates(a: Candidate, b: Candidate) -> bool:
@@ -176,14 +179,18 @@ def pareto(candidates: list[Candidate]) -> list[Candidate]:
 def prefilter(domains: dict[Slot, list[Candidate]], budget: Decimal, purpose: Purpose,
               cap: int = MAX_PARTS_PER_CATEGORY, optional: tuple[Slot, ...] = OPTIONAL,
               extra: PairRule | None = None) -> dict[Slot, list[Candidate]]:
-    """At most `cap` parts per slot for the build search:
+    """About `cap` parts per slot for the build search:
     1. parts with specs whose price leaves room for the cheapest part of every other slot;
     2. the Pareto front within each signature group (see `pareto`);
-    3. one part of a cheap build: slot by slot, the cheapest part that fits (compatibility
-       and `extra`) the parts reserved so far, with a PSU covering their draw + 50 W for
-       the case, cooler and drives. Without it, the best-ranked parts can all be too
-       expensive together and no build fits the budget, even though cheaper builds exist;
-    4. the parts a part-level TOPSIS (same weights, the part's own price/performance/power;
+    3. the parts of cheap complete builds (see `cheap_build`): first the cheapest overall,
+       then, once the CPUs are picked, one for each picked CPU. Without them, the
+       best-ranked parts of different slots may not combine (an expensive or other-socket
+       pick in one slot, no matching part in the next), leaving a CPU with no build or no
+       build within the budget. A slot can get a little over `cap` parts this way;
+    4. for CPU, GPU, RAM and the first drive, the best-ranked part (by the part-level
+       TOPSIS of step 5) in each of the remaining price bands of the slot, so builds span
+       cheap to near the budget and differ in more than one part;
+    5. the parts a part-level TOPSIS (same weights, the part's own price/performance/power;
        for coolers the rated TDP counts as performance, so better coolers rank higher, not
        just cheaper ones) ranks best, taking groups in turn so different sockets and sizes
        stay represented, and only parts that fit (compatibility and `extra`) at least one
@@ -194,19 +201,14 @@ def prefilter(domains: dict[Slot, list[Candidate]], budget: Decimal, purpose: Pu
     for s in optional:
         cheapest[s] = 0  # may be left out
     limit = int(budget * 100)
+    base = {s: pareto([x for x in with_specs[s] if x.cents <= limit - sum(v for c, v in cheapest.items() if c != s)])
+            for s in Slot}
+    first = cheap_build(base, optional, extra)  # {} when no cheap build was found
+    chains = [first] if first else []
     picked: dict[Slot, list[Candidate]] = {}
-    chain: dict[Slot, Candidate | None] = {}  # the cheap build of step 3
-
-    def fits_chain(slot: Slot, x: Candidate | None) -> bool:
-        if slot == Slot.PSU and x is not None:
-            draw = sum(y.power_w for y in chain.values() if y)
-            if x.part.spec.wattage < draw + 50:
-                return False
-        return all(_strict_fit(s, y, slot, x) and (extra is None or extra(s, y, slot, x)) for s, y in chain.items())
 
     for category in PICK_ORDER:
-        room = limit - sum(v for c, v in cheapest.items() if c != category)
-        front = pareto([x for x in with_specs[category] if x.cents <= room])
+        front = base[category]
 
         def fits_earlier(x: Candidate) -> bool:
             for earlier, chosen in picked.items():
@@ -225,18 +227,70 @@ def prefilter(domains: dict[Slot, list[Candidate]], budget: Decimal, purpose: Pu
         groups: dict[tuple, list[Candidate]] = {}
         for x in order:  # best first within each group; groups ordered by their best part
             groups.setdefault(signature(x.part), []).append(x)
-        if category in optional and fits_chain(category, None):
-            chain[category], chosen = None, []
-        else:
-            reserved = min((x for x in front if fits_chain(category, x)), key=lambda x: x.cents, default=None)
-            chain[category], chosen = reserved, [reserved] if reserved else []
+        chosen = []
+        for chain in chains:
+            part = chain.get(category)
+            if part is not None and part in front and part not in chosen:
+                chosen.append(part)
+        if category in PRICE_SPREAD_SLOTS:
+            # Take the best-ranked part of each price band, so the shown variants can run
+            # from cheap to near the budget.
+            low, high = min(x.cents for x in front), max(x.cents for x in front)
+            bands = cap - len(chosen)
+            width = (high - low) / bands if bands else 0
+            for band in range(bands):
+                in_band = [x for x in order if x not in chosen and
+                           (width == 0 or min(bands - 1, int((x.cents - low) / width)) == band)]
+                if in_band:
+                    chosen.append(in_band[0])
         queues = [[x for x in queue if x not in chosen] for queue in groups.values()]
         while len(chosen) < cap and any(queues):
             for queue in queues:
                 if queue and len(chosen) < cap:
                     chosen.append(queue.pop(0))
         picked[category] = chosen
+        if category == Slot.CPU:
+            # Step 3 for every picked CPU: each one then has parts to form a complete build.
+            for cpu in chosen:
+                if not any(chain.get(Slot.CPU) is cpu for chain in chains):
+                    chain = cheap_build({**base, Slot.CPU: [cpu]}, optional, extra)
+                    if chain:
+                        chains.append(chain)
     return picked
+
+
+CHEAP_BUILD_CPU_TRIES = 25
+
+
+def cheap_build(domains: dict[Slot, list[Candidate]], optional: tuple[Slot, ...] = OPTIONAL,
+                extra: PairRule | None = None) -> dict[Slot, Candidate | None]:
+    """A cheap complete build, built greedily: for each CPU from the cheapest up (at most
+    CHEAP_BUILD_CPU_TRIES), slot by slot the cheapest part that fits (compatibility and
+    `extra`) every part chosen so far, an optional slot left empty when that fits, and a
+    PSU covering the chosen parts' draw + 50 W for the case, cooler and drives. The first
+    CPU for which every slot gets a part wins; {} when none does."""
+    for cpu in sorted(domains[Slot.CPU], key=lambda x: x.cents)[:CHEAP_BUILD_CPU_TRIES]:
+        build: dict[Slot, Candidate | None] = {Slot.CPU: cpu}
+
+        def fits(slot: Slot, x: Candidate | None) -> bool:
+            if slot == Slot.PSU and x is not None:
+                if x.part.spec.wattage < sum(y.power_w for y in build.values() if y) + 50:
+                    return False
+            return all(_strict_fit(s, y, slot, x) and (extra is None or extra(s, y, slot, x))
+                       for s, y in build.items())
+
+        for slot in PICK_ORDER[1:]:
+            if slot in optional and fits(slot, None):
+                build[slot] = None
+                continue
+            part = min((x for x in domains[slot] if fits(slot, x)), key=lambda x: x.cents, default=None)
+            if part is None:
+                break
+            build[slot] = part
+        else:
+            if _drives_fit(build):
+                return build
+    return {}
 
 
 def _strict_fit(a: Slot, x: Candidate | None, b: Slot, y: Candidate | None) -> bool:
@@ -244,3 +298,51 @@ def _strict_fit(a: Slot, x: Candidate | None, b: Slot, y: Candidate | None) -> b
         return supported(a, x and x.part, b, y and y.part)
     _, issues, unknown = check_pair(x.part, y.part)
     return not unknown and not any(i.severity == "error" for i in issues)
+
+
+# ---------- Which ranked builds to show ----------
+
+SHOWN_BUILDS = 6
+
+
+def spread_by_price(scores: list[TopsisScore], prices: list[Decimal], pairs: list[tuple], budget: Decimal,
+                    count: int = SHOWN_BUILDS, setups: list[tuple] | None = None) -> list[tuple[int, TopsisScore]]:
+    """Builds to show, as (rank, score), cheapest first.
+
+    The range from the cheapest ranked build to the budget is split into `count` equal
+    price bands; each band shows its best-ranked build, so the variants run from cheap to
+    near the budget. No two shown builds share a CPU chip + GPU chip pair (`pairs[i]`).
+    When some bands are empty, the best-ranked remaining builds with new pairs fill in;
+    when no new pair is left (office has no GPU), builds with a new `setups[i]` (pair plus
+    RAM and storage size) do. `prices[i]`, `pairs[i]` and `setups[i]` belong to the build
+    at `scores[k].index == i`.
+    """
+    if not scores:
+        return []
+    low = min(prices)
+    width = (budget - low) / count
+    band_of = lambda price: count - 1 if width <= 0 else min(count - 1, int((price - low) / width))
+    ranked = list(enumerate(scores, start=1))
+    chosen: list[tuple[int, TopsisScore]] = []
+    bands, used = set(), set()
+    for rank, score in ranked:  # best first: the first build seen in a band is its best
+        band, pair = band_of(prices[score.index]), pairs[score.index]
+        if band not in bands and pair not in used:
+            bands.add(band)
+            used.add(pair)
+            chosen.append((rank, score))
+    for rank, score in ranked:
+        if len(chosen) >= count:
+            break
+        if pairs[score.index] not in used:
+            used.add(pairs[score.index])
+            chosen.append((rank, score))
+    if setups is not None:
+        shown = {setups[s.index] for _, s in chosen}
+        for rank, score in ranked:
+            if len(chosen) >= count:
+                break
+            if setups[score.index] not in shown:
+                shown.add(setups[score.index])
+                chosen.append((rank, score))
+    return sorted(chosen, key=lambda item: prices[item[1].index])

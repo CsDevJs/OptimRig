@@ -5,7 +5,7 @@ import { useCurrency } from '../context/CurrencyContext'
 import { componentName, TIER_LABEL } from '../lib/catalog'
 
 const TIER_CLASS = {
-  low: 'bg-emerald-400/15 text-emerald-300 border-emerald-400/30',
+  low: 'bg-white/10 text-white border-white/30',
   mid: 'bg-sky-400/15 text-sky-300 border-sky-400/30',
   high: 'bg-violet-400/15 text-violet-300 border-violet-400/30',
 } as const

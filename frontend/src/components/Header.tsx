@@ -12,7 +12,7 @@ import { Logo } from './Logo'
 const TABS = [
   { to: '/', label: 'Smart', icon: WandSparkles, color: 'text-violet-300' },
   { to: '/manual', label: 'Manual', icon: Wrench, color: 'text-sky-300' },
-  { to: '/sabloane', label: 'Șabloane', icon: Layers, color: 'text-emerald-300' },
+  { to: '/sabloane', label: 'Șabloane', icon: Layers, color: 'text-white' },
   { to: '/exchange', label: 'Exchange', icon: Globe, color: 'text-pink-300' },
   { to: '/fondatori', label: 'Fondatori', icon: Users, color: 'text-violet-300' },
 ]
@@ -95,7 +95,7 @@ function CurrencyMenu() {
                 <span className="flex items-center gap-2 min-w-0">
                   <Flag code={c} /><span className="font-mono font-bold text-violet-300">{c}</span><span className="truncate">{CURRENCIES[c].label}</span>
                 </span>
-                {c === code && <Check size={13} className="text-emerald-300 shrink-0" />}
+                {c === code && <Check size={13} className="text-violet-300 shrink-0" />}
               </button>
             ))}
           </div>
@@ -135,7 +135,7 @@ function AccountButtons() {
 
 export function Header() {
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-[#0b0e0c]/95 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-[#140b30]/95 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 py-2.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <Logo />
         <NavTabs />

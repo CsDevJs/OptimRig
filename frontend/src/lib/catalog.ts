@@ -10,12 +10,12 @@ export const ORDER: Slot[] = ['cpu', 'cooler', 'motherboard', 'ram', 'gpu', 'sto
 export const CATEGORY_INFO: Record<Slot, { title: string; short: string; icon: LucideIcon; accent: string }> = {
   cpu: { title: 'Procesor', short: 'CPU', icon: Cpu, accent: 'text-violet-300' },
   cooler: { title: 'Cooler', short: 'cooler', icon: Fan, accent: 'text-sky-300' },
-  motherboard: { title: 'Placă de bază', short: 'placă de bază', icon: CircuitBoard, accent: 'text-emerald-300' },
-  ram: { title: 'Memorie RAM', short: 'RAM', icon: MemoryStick, accent: 'text-amber-300' },
+  motherboard: { title: 'Placă de bază', short: 'placă de bază', icon: CircuitBoard, accent: 'text-white' },
+  ram: { title: 'Memorie RAM', short: 'RAM', icon: MemoryStick, accent: 'text-pink-300' },
   gpu: { title: 'Placă video', short: 'GPU', icon: Gpu, accent: 'text-pink-300' },
   storage: { title: 'Stocare', short: 'stocare', icon: HardDrive, accent: 'text-sky-300' },
   storage2: { title: 'Stocare 2 (opțional)', short: 'a doua unitate', icon: HardDrive, accent: 'text-sky-300' },
-  psu: { title: 'Sursă', short: 'sursă', icon: Zap, accent: 'text-amber-300' },
+  psu: { title: 'Sursă', short: 'sursă', icon: Zap, accent: 'text-violet-200' },
   case: { title: 'Carcasă', short: 'carcasă', icon: Box, accent: 'text-violet-300' },
 }
 

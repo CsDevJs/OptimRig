@@ -8,8 +8,8 @@ import { CURRENCIES, CURRENCY_CODES, groupThousands, POPULAR, RATES_NOTE, REGION
 
 type Preset = 'POPULAR' | 'CONVENIENT' | 'EXPENSIVE' | 'ALL'
 const PRESETS: { id: Preset; label: string; icon: ReactNode }[] = [
-  { id: 'POPULAR', label: 'Valute populare', icon: <Star size={11} className="text-amber-300" /> },
-  { id: 'CONVENIENT', label: 'Peste 10 lei', icon: <Zap size={11} className="text-emerald-300" /> },
+  { id: 'POPULAR', label: 'Valute populare', icon: <Star size={11} className="text-white" /> },
+  { id: 'CONVENIENT', label: 'Peste 10 lei', icon: <Zap size={11} className="text-violet-300" /> },
   { id: 'EXPENSIVE', label: 'Peste 20 lei', icon: <ArrowUpRight size={11} className="text-pink-300" /> },
   { id: 'ALL', label: 'Toate (A–Z)', icon: <Globe size={11} className="text-violet-200" /> },
 ]

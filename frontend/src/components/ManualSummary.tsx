@@ -71,7 +71,7 @@ export function ManualSummary({ selection, byId, compatibility, plan, psuWatts, 
           <span className="font-mono font-bold text-slate-200">{power} W{psuWatts ? ` / ${psuWatts} W` : ''}</span>
         </div>
         <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
-          <div className={`h-full transition-all duration-500 bg-gradient-to-r ${psuWatts && psuWatts < recommended ? 'from-amber-400 to-red-400' : 'from-emerald-400 to-violet-400'}`}
+          <div className={`h-full transition-all duration-500 bg-gradient-to-r ${psuWatts && psuWatts < recommended ? 'from-amber-400 to-red-400' : 'from-sky-400 to-violet-400'}`}
             style={{ width: `${psuWatts ? Math.min(100, Math.round((power / psuWatts) * 100)) : 0}%` }} />
         </div>
         {count > 0 && <p className="text-[10px] text-slate-500">Sursă recomandată: minim {recommended} W (consum de vârf + 20% sau recomandarea producătorului GPU).</p>}

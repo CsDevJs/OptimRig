@@ -81,7 +81,7 @@ export function AuthPage() {
           )}
           {error && <div className="p-2.5 rounded-xl bg-red-950/50 border border-red-500/50 text-red-200 text-xs">{error}</div>}
           <button type="submit" disabled={busy}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-400 via-sky-400 to-emerald-300 text-slate-950 font-bold text-xs shadow-lg transition hover:scale-[1.02] disabled:opacity-60">
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-sky-400 via-violet-400 to-violet-300 text-slate-950 font-bold text-xs shadow-lg transition hover:scale-[1.02] disabled:opacity-60">
             {registerMode ? 'Creează contul' : 'Conectare în cont'}
           </button>
         </form>

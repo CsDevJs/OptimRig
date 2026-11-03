@@ -8,6 +8,8 @@ Run through `python -m scripts.import_catalog load`. Steps:
 5. upsert components, specs and in-stock offers. A product whose page URL is already an
    offer of a component is that component: it gets the new offers. Components from
    seed/seed.sql keep their hand-checked specs; imported ones get today's specs.
+   Imported components that this run no longer produces are deleted, unless a saved
+   build uses them.
 A product that still lacks a required spec is saved without specs (it is listed in the
 report and shows as "specifications missing", so TOPSIS skips it).
 """
@@ -22,7 +24,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.db.models import SPEC_MODELS, Availability, Category, Component, Offer as OfferRow, Store, Tier
+from app.db.models import SPEC_MODELS, Availability, BuildItem, Category, Component, Offer as OfferRow, Store, Tier
 from app.db.session import SessionLocal
 from app.services.catalog_merge import (
     OPTIONAL, REQUIRED, Offer, Product, benchmark_scores, cpu_facts, gpu_clearance, gpu_from_chip, merge, other_facts,
@@ -267,11 +269,23 @@ def load(products_file: Path) -> None:
                 row.price_mdl, row.regular_price_mdl = o.price, o.regular_price
                 row.availability, row.checked_on, row.last_check_status = Availability.IN_STOCK, today, "ok"
                 offers_written += 1
+
+        # Imported components this run no longer produces (now skipped, e.g. SAS drives, or
+        # gone from the stores) are removed, unless a saved build uses them.
+        in_builds = set(db.scalars(select(BuildItem.component_id)))
+        stale = [c for c in existing if c.slug not in hand_entered and c.id not in claimed]
+        removed = [c for c in stale if c.id not in in_builds]
+        for c in removed:
+            db.delete(c)
+        report["removed"] = [f"{c.brand} {c.model}" for c in removed]
+        report["kept_in_saved_builds"] = [f"{c.brand} {c.model}" for c in stale if c.id in in_builds]
         db.commit()
 
     REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"Created {created} components, added offers to {updated} existing ones, wrote {offers_written} offers.")
     print(f"{len(report['without_specs'])} products saved without specs (missing data); details in {REPORT}")
+    print(f"Removed {len(report['removed'])} imported components no longer found; "
+          f"kept {len(report['kept_in_saved_builds'])} that saved builds use.")
     for category, chips in unscored.items():
         if chips:
             print(f"No PassMark score for {len(chips)} {category} chips: {', '.join(chips[:15])}")
