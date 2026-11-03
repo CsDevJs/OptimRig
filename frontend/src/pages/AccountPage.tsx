@@ -59,7 +59,7 @@ export function AccountPage() {
   const stats = [
     { label: 'Build-uri salvate', value: builds?.length ?? '…', icon: Layers, cls: 'bg-violet-500/20 border-violet-400/30 text-violet-300' },
     { label: 'Monedă preferată', value: code, icon: Globe, cls: 'bg-sky-500/20 border-sky-400/30 text-sky-300' },
-    { label: 'Placa video din ultimul build', value: gpu ? componentName(gpu) : 'Niciun build salvat', icon: Cpu, cls: 'bg-emerald-500/20 border-emerald-400/30 text-emerald-300', small: true },
+    { label: 'Placa video din ultimul build', value: gpu ? componentName(gpu) : 'Niciun build salvat', icon: Cpu, cls: 'bg-pink-500/20 border-pink-400/30 text-pink-300', small: true },
   ]
 
   return (
@@ -87,7 +87,7 @@ export function AccountPage() {
             <div className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 ${cls}`}><Icon size={18} /></div>
             <div className="min-w-0">
               <span className="text-[11px] text-slate-400 block">{label}</span>
-              <span className={`font-extrabold text-white block truncate ${small ? 'text-xs text-emerald-300' : 'text-xl font-mono'}`}>{value}</span>
+              <span className={`font-extrabold text-white block truncate ${small ? 'text-xs text-pink-300' : 'text-xl font-mono'}`}>{value}</span>
             </div>
           </div>
         ))}

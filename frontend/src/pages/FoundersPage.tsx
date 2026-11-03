@@ -6,13 +6,13 @@ import { useToast } from '../context/ToastContext'
 const FOUNDERS = [
   { name: 'Buza Alin', role: 'Front-End Developer & UI/UX Specialist', ring: 'border-violet-400/60', text: 'text-violet-300' },
   { name: 'Grosu Vladislav', role: 'Database Developer & Architecture Lead', ring: 'border-sky-400/60', text: 'text-sky-300' },
-  { name: 'Borta Adrian', role: 'Back-End Developer & Security Architect', ring: 'border-emerald-400/60', text: 'text-emerald-300' },
+  { name: 'Borta Adrian', role: 'Back-End Developer & Security Architect', ring: 'border-pink-400/60', text: 'text-pink-300' },
 ]
 
 const TECH = [
   ['React + TypeScript', 'bg-violet-400/15 border-violet-400/30 text-violet-200'],
   ['Vite & Tailwind CSS', 'bg-sky-400/15 border-sky-400/30 text-sky-200'],
-  ['FastAPI (Python)', 'bg-emerald-400/15 border-emerald-400/30 text-emerald-200'],
+  ['FastAPI (Python)', 'bg-pink-400/15 border-pink-400/30 text-pink-200'],
   ['PostgreSQL', 'bg-violet-400/15 border-violet-400/30 text-violet-200'],
   ['AC-3 · TOPSIS · Min-Cost Max-Flow', 'bg-sky-400/15 border-sky-400/30 text-sky-200'],
 ]

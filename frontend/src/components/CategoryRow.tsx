@@ -89,7 +89,7 @@ export function CategoryRow(props: Props) {
                     <PriceTag offer={cheapestOffer(c)} />
                     <span className="text-[10px] text-slate-400">{stores ? `${stores} ${stores === 1 ? 'magazin' : 'magazine'} în stoc` : 'nu e în stoc'}</span>
                   </span>
-                  {isSelected && <Check size={15} className="text-emerald-300 shrink-0" />}
+                  {isSelected && <Check size={15} className="text-violet-300 shrink-0" />}
                 </button>
               )
             })}

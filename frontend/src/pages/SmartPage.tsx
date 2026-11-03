@@ -19,7 +19,7 @@ const PURPOSES = [
 const PURPOSE_KEY = 'pc-configurator-purpose'
 const pct = (weight: number) => `${Math.round(weight * 100)}%`
 const PRESETS = [
-  { label: 'Buget', value: 30000, cls: 'bg-emerald-400/10 hover:bg-emerald-400/20 border-emerald-400/30 text-emerald-300' },
+  { label: 'Buget', value: 30000, cls: 'bg-white/5 hover:bg-white/10 border-white/25 text-white' },
   { label: 'Mediu', value: 55000, cls: 'bg-sky-400/10 hover:bg-sky-400/20 border-sky-400/30 text-sky-300' },
   { label: 'High-End', value: 90000, cls: 'bg-violet-400/10 hover:bg-violet-400/20 border-violet-400/30 text-violet-300' },
   { label: 'Ultra', value: 120000, cls: 'bg-pink-400/10 hover:bg-pink-400/20 border-pink-400/30 text-pink-300' },
@@ -73,7 +73,7 @@ export function SmartPage() {
       <div className="slate-glow-card glow rounded-3xl p-6 sm:p-8 relative overflow-hidden">
         <div className="space-y-2">
           <span className="px-3 py-1 rounded-full bg-violet-400/15 border border-violet-300/30 text-violet-200 text-xs font-semibold flex items-center gap-1.5 w-fit">
-            <WandSparkles size={13} className="text-emerald-300" /> Recomandare inteligentă
+            <WandSparkles size={13} className="text-white" /> Recomandare inteligentă
           </span>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Configurator inteligent PC</h1>
           <p className="text-slate-300 text-sm sm:text-base">

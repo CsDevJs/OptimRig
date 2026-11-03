@@ -10,7 +10,7 @@ import { TIER_LABEL } from '../lib/catalog'
 
 const FILTERS: { value: Tier | 'all'; label: string; cls: string }[] = [
   { value: 'all', label: 'Toate', cls: 'text-white border-violet-400/40' },
-  { value: 'low', label: TIER_LABEL.low, cls: 'text-emerald-300 border-emerald-400/30' },
+  { value: 'low', label: TIER_LABEL.low, cls: 'text-white border-white/30' },
   { value: 'mid', label: TIER_LABEL.mid, cls: 'text-sky-300 border-sky-400/30' },
   { value: 'high', label: TIER_LABEL.high, cls: 'text-violet-300 border-violet-400/30' },
 ]
