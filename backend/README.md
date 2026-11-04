@@ -275,8 +275,15 @@ git-ignored), so a rerun only asks for new pages. Neocomputer stopped answering 
 
 **Specs** (`app/services/catalog_normalize.py`): each store names its specs
 differently, in Romanian or Russian; a field is found by label keywords, then by
-the title. Skipped: laptop/server memory, DDR3 platforms, external storage and
-memory cards, cases with a built-in PSU, TFX/Flex PSUs, case fans and accessories.
+the title. Skipped, judged on the title and the store's own product-type labels
+(`not_a_desktop_part` and the per-category rules): used, refurbished, reconditioned or
+recertified parts (title, or a condition field such as Ultra's "Stare"); laptop memory; ECC/registered and
+OEM server/NAS memory, power supplies and drives (Dell, Fujitsu, HP, Lenovo, Synology,
+Supermicro); DDR3 platforms (e.g. H61, H81, A68 boards); SSD enclosures, external
+drives and memory cards; SAS and M.2 22110 data-center drives; external GPUs; PSU
+cables and adapters; cases with a built-in PSU; TFX/Flex PSUs; case fans and other
+cooling accessories. Retail enterprise SATA HDDs (Seagate Exos, WD Gold) are kept:
+they work in a desktop.
 Pages of the same product are merged (by part number; CPUs by model + Box/Tray),
 with the cheapest page per store. Missing values are filled, in this order
 (`app/services/catalog_merge.py`):

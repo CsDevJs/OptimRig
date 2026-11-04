@@ -105,6 +105,9 @@ _PREFIX = re.compile(
     r"^(procesor|cpu|placa de baza|placă de bază|placa video|placă video|vga card|video card|memorie ram|memorie|"
     r"memorii ram|ram|ssd|hdd|disc dur|unitate ssd|sursa de alimentare|sursă de alimentare|sursa|sursă|psu|"
     r"carcasa|carcasă|case|cooler procesor|cooler|racire|răcire|sistem de racire|unitate hdd|unitate ssd|"
+    # Darwin titles some CPU coolers "Ventilator de carcasă" (case fan); real case fans
+    # have no CPU socket list and are skipped by cooler().
+    r"ventilator de carcas[aă]|"
     r"жесткий диск|процессор|материнская плата|"
     r"видеокарта|оперативная память|блок питания|корпус|кулер|система охлаждения|накопитель)\s+", re.I)
 
@@ -579,9 +582,60 @@ def _plausible(fields: dict) -> dict:
     return out
 
 
+# Products the stores list in a PC-component category that are not a part of a desktop
+# build: accessories, external devices, server/NAS parts. Checked on the title and on the
+# store's own product-type labels, before anything else.
+_NOT_A_PART = {
+    Category.STORAGE: re.compile(
+        r"enclosure|carcas[aă] extern|rack|caddy|docking|adaptor|adapter|cartel[aă] de memorie|memory card"
+        r"|micro-?sd|\bsd card|card reader|корпус для|карман|бокс", re.I),
+    Category.PSU: re.compile(r"\bcable\b|\bcablu\b|кабель|extension|prelungitor|adaptor|adapter|переходник", re.I),
+    Category.GPU: re.compile(r"extern[aă]?\b|external|xg mobile|egpu|docking|riser|bracket|suport placa", re.I),
+    Category.RAM: re.compile(r"\becc\b|\brdimm\b|registered|\bd4ec\b|\bd5ec\b", re.I),
+    Category.CASE: re.compile(r"rack|server|carcas[aă] extern", re.I),
+}
+# Only new parts are recommended: used, refurbished, reconditioned or recertified ones are
+# skipped (PrimePC writes "Used" / "б/у" in the title, Ultra "Stare: Refurbished").
+_USED = re.compile(r"\bused\b|б/у|\bб\.у\.|folosit|second[- ]?hand|refurbished|reconditionat|recondiționat"
+                   r"|recertified|восстановлен", re.I)
+# OEM server/NAS brands whose memory and power supplies fit only their own systems.
+_SERVER_BRANDS = re.compile(r"^(fujitsu|dell|hp|hpe|lenovo|synology|supermicro)\b", re.I)
+# DDR3-era chipsets (the schema models DDR4/DDR5 platforms only).
+# "(?!\d)": H61 and B85 are DDR3, but H610 and B850 are current chipsets.
+_DDR3_CHIPSETS = re.compile(r"\b(h61|h67|p67|z68|b75|h77|z77|h81|b85|h87|z87|z97|h97|a55|a58|a68|a78|a88|fm2)(?!\d)", re.I)
+
+
+def not_a_desktop_part(category: Category, title: str, labels: "Labels", brand: str | None) -> str | None:
+    """Why this page is not a desktop PC part of `category`, or None when it is."""
+    condition = " ".join(v for k, v in labels.items if re.search(r"^(stare|состояние|condition)", k))
+    if _USED.search(f"{title} {condition}"):
+        return "used or refurbished part"
+    kinds = " ".join(v for k, v in labels.items if re.search(r"^(tip|тип|type|aplicare|destinatie|segment|form factor|format)", k))
+    text = f"{title} {kinds}"
+    pattern = _NOT_A_PART.get(category)
+    if pattern and pattern.search(text):
+        return "accessory, external or server part"
+    if category in (Category.RAM, Category.PSU, Category.STORAGE) and brand and _SERVER_BRANDS.match(brand):
+        return "server/NAS part (OEM memory, power supply or drive)"
+    if category == Category.STORAGE:
+        # Retail enterprise SATA drives (Seagate Exos, WD Gold) work in a desktop and stay;
+        # Nytro is an M.2 22110 data-center SSD.
+        if re.search(r"\bserver\b|nytro", plain(f"{title} {kinds}")):
+            return "server drive"
+        if re.search(r"22110", text):
+            return "M.2 22110 SSD (longer than the 2280 slots of desktop boards)"
+    if category == Category.MOTHERBOARD and _DDR3_CHIPSETS.search(title):
+        return "DDR3 or older platform"
+    return None
+
+
 def normalize(category: Category, title: str, specs: dict[str, str]) -> Specs:
     labels = Labels(specs)
     brand = brand_of(title, labels)
+    reason = not_a_desktop_part(category, title, labels, brand)
+    if reason:
+        return Specs(category=category, brand=brand, model=clean_model(title, brand),
+                     key=_key(category, title), skip=reason)
     model = clean_model(title, brand)
     mpn = _mpn(labels, title)
     skip, chip, power = None, None, None
