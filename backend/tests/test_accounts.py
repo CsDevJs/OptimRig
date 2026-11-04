@@ -10,19 +10,101 @@ from app.config import settings
 from app.main import app
 from app.db.models import Availability, BuildItem, Category, Component, Offer, User
 from app.security import create_access_token, hash_password, read_access_token, verify_password
+from app.audit import log_action
+from app.vault import DuplicateEmail, UserVault, VaultError, decode_key
 
 PASSWORD = "correct horse battery"
 
 
 # ---------- Without a database ----------
 
+KEY = decode_key("dGVzdC1vbmx5LXZhdWx0LWtleS0zMi1ieXRlcy0hISE=")
+HASH = hash_password(PASSWORD)
+
+
 def test_password_hash_round_trip():
     hashed = hash_password(PASSWORD)
-    assert hashed != PASSWORD
+    assert hashed.startswith("$argon2id$") and PASSWORD not in hashed
+    assert hash_password(PASSWORD) != hashed  # a new random salt each time
     assert verify_password(hashed, PASSWORD)
     assert not verify_password(hashed, "wrong password")
     assert not verify_password(None, PASSWORD)
     assert not verify_password("not-an-argon2-hash", PASSWORD)
+
+
+def test_vault_round_trip_keeps_nothing_readable_on_disk(tmp_path):
+    vault = UserVault(tmp_path / "users.vault", KEY)
+    vault.add(7, "Ana@Example.com", hash_password(PASSWORD))
+    raw = (tmp_path / "users.vault").read_bytes()
+    assert b"ana" not in raw.lower() and b"argon2" not in raw and b"example" not in raw
+    again = UserVault(tmp_path / "users.vault", KEY)  # a new process reading the same file
+    assert again.get(7).email == "ana@example.com" and verify_password(again.get(7).password_hash, PASSWORD)
+    assert again.find("ANA@example.com").id == 7
+    assert again.find("nobody") is None
+
+
+def test_vault_rejects_duplicates_case_insensitively(tmp_path):
+    vault = UserVault(tmp_path / "users.vault", KEY)
+    vault.add(1, "a@example.com", HASH)
+    with pytest.raises(DuplicateEmail):
+        vault.add(2, "A@EXAMPLE.com", HASH)
+
+
+def test_vault_needs_the_right_key_and_an_unchanged_file(tmp_path):
+    path = tmp_path / "users.vault"
+    UserVault(path, KEY).add(1, "a@example.com", HASH)
+    with pytest.raises(VaultError, match="wrong VAULT_KEY"):
+        UserVault(path, bytes(32)).all()
+    text = path.read_text()
+    flipped = text.replace(text[-6], "A" if text[-6] != "A" else "B")  # one byte of ciphertext changed
+    path.write_text(flipped)
+    with pytest.raises(VaultError):
+        UserVault(path, KEY).all()
+
+
+def test_each_save_uses_a_new_nonce(tmp_path):
+    vault = UserVault(tmp_path / "users.vault", KEY)
+    vault.add(1, "a@example.com", HASH)
+    first = (tmp_path / "users.vault").read_text()
+    vault.remove(1)
+    vault.add(1, "a@example.com", HASH)
+    assert first != (tmp_path / "users.vault").read_text()  # same data, different ciphertext
+
+
+@pytest.mark.parametrize("value", ["CHANGE_ME", "", "c2hvcnQ=", "x" * 44])
+def test_vault_key_must_be_32_bytes(value):
+    with pytest.raises(ValueError, match="VAULT_KEY"):
+        decode_key(value)
+
+
+
+
+def test_activity_log_line_format(activity_log):
+    log_action("LOGIN_FAILED", "ana@example.com", reason="wrong\npassword | x")
+    log_action("BUILD_SAVE_FAILED", None, name="PC")
+    first, second = activity_log()
+    # "date time | ACTION | email=... | details"; a newline or "|" in a value can't fake a field or a line.
+    assert first.split(" | ")[1:] == ["LOGIN_FAILED", "email=ana@example.com", "reason=wrong password / x"]
+    assert second.endswith("BUILD_SAVE_FAILED | email=- | name=PC")
+
+
+def test_activity_log_rotates(tmp_path, monkeypatch):
+    import logging
+    from app import audit
+    monkeypatch.setattr(settings, "audit_log_dir", tmp_path)
+    monkeypatch.setattr(settings, "audit_log_max_bytes", 300)
+    monkeypatch.setattr(settings, "audit_log_backup_count", 2)
+    logger = logging.getLogger(audit._LOGGER_NAME)
+    saved, logger.handlers = logger.handlers, []  # set up again with the small limits
+    try:
+        for i in range(30):
+            log_action("LOGIN_OK", f"user{i}@example.com")
+        for handler in logger.handlers:
+            handler.close()
+    finally:
+        logger.handlers = saved
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["activity.log", "activity.log.1", "activity.log.2"]
+    assert "user29@example.com" in (tmp_path / "activity.log").read_text(encoding="utf-8")
 
 
 def test_token_round_trip_and_rejections():
@@ -41,10 +123,18 @@ def test_token_round_trip_and_rejections():
     {"email": "a@example.com", "password": "short"},
     {"email": "a@example.com", "password": "x" * 129},
     {"email": "a@example.com"},
+    {"password": PASSWORD},
+    {"email": "a@example.com", "username": "ana", "password": PASSWORD},  # no usernames
     {"email": "a@example.com", "password": PASSWORD, "admin": True},
 ])
-def test_invalid_credentials_payload(client, body):
+def test_invalid_registration_payload(client, body):
     assert client.post("/auth/register", json=body).status_code == 422
+
+
+@pytest.mark.parametrize("body", [{"login": "", "password": PASSWORD}, {"login": "ana"},
+                                  {"email": "a@example.com", "password": PASSWORD}])
+def test_invalid_login_payload(client, body):
+    assert client.post("/auth/login", json=body).status_code == 422
 
 
 @pytest.mark.parametrize("path", ["/auth/me", "/builds", "/builds/1"])
@@ -56,7 +146,7 @@ def test_protected_endpoints_require_token(client, path):
 
 def test_invalid_build_payloads(client):
     # A stand-in user, so body validation is tested without a database.
-    app.dependency_overrides[get_current_user] = lambda: User(id=1, email="a@example.com")
+    app.dependency_overrides[get_current_user] = lambda: User(id=1)
     for body in [
         {"name": "  ", "components": {"cpu": 1}},
         {"name": "x" * 101, "components": {"cpu": 1}},
@@ -71,8 +161,9 @@ def test_invalid_build_payloads(client):
 # ---------- Against the seeded database ----------
 
 def register_and_login(client, email="user@example.com"):
-    assert client.post("/auth/register", json={"email": email, "password": PASSWORD}).status_code == 201
-    response = client.post("/auth/login", json={"email": email, "password": PASSWORD})
+    body = {"email": email, "password": PASSWORD}
+    assert client.post("/auth/register", json=body).status_code == 201
+    response = client.post("/auth/login", json={"login": email, "password": PASSWORD})
     assert response.status_code == 200
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
@@ -91,44 +182,59 @@ def am5_build(db):
             "psu": psu, "case": case, "cooler": cooler}
 
 
-def test_register_login_me(catalog_client):
+def test_register_login_me(catalog_client, vault, activity_log):
     client, db = catalog_client
     created = client.post("/auth/register", json={"email": "Mixed@Example.com", "password": PASSWORD})
     assert created.status_code == 201
-    assert created.json()["email"] == "mixed@example.com"
-    assert "password" not in str(created.json())
-    stored = db.scalar(select(User).where(User.email == "mixed@example.com"))
-    assert stored.password_hash.startswith("$argon2") and PASSWORD not in stored.password_hash
+    body = created.json()
+    assert body["email"] == "mixed@example.com" and "username" not in body
+    assert "password" not in str(body)
+    # The database row has no personal data; the vault file has none in readable form.
+    assert {c.name for c in User.__table__.columns} == {"id", "created_at"}
+    raw = vault.path.read_bytes()
+    assert b"mixed" not in raw.lower() and PASSWORD.encode() not in raw
+    stored = vault.get(body["id"]).password_hash  # decrypted: still only a one-way hash
+    assert stored.startswith("$argon2id$") and PASSWORD not in stored
 
-    duplicate = client.post("/auth/register", json={"email": "mixed@EXAMPLE.com", "password": PASSWORD})
-    assert duplicate.status_code == 409
+    assert client.post("/auth/register", json={"email": "mixed@EXAMPLE.com",
+                                               "password": PASSWORD}).json()["detail"] == "Email already registered"
 
-    login = client.post("/auth/login", json={"email": "MIXED@example.com", "password": PASSWORD})
-    assert login.status_code == 200
-    token = login.json()
+    token = client.post("/auth/login", json={"login": "MIXED@example.com", "password": PASSWORD}).json()  # any case
     assert token["token_type"] == "bearer" and token["expires_in"] == settings.access_token_minutes * 60
     me = client.get("/auth/me", headers={"Authorization": f"Bearer {token['access_token']}"})
     assert me.json()["email"] == "mixed@example.com"
+
+    client.post("/auth/login", json={"login": "mixed@example.com", "password": "wrong password"})
+    client.post("/auth/login", json={"login": "Nobody@example.com", "password": PASSWORD})
+    actions = [line.split(" | ", 1)[1] for line in activity_log()]
+    assert actions == [
+        f"REGISTERED | email=mixed@example.com | user_id={body['id']}",
+        "REGISTER_FAILED | email=mixed@example.com | reason=email already registered",
+        f"LOGIN_OK | email=mixed@example.com | user_id={body['id']}",
+        "LOGIN_FAILED | email=mixed@example.com | reason=wrong password",
+        "LOGIN_FAILED | email=nobody@example.com | reason=no account with this email",
+    ]
+    assert not any(PASSWORD in line for line in activity_log())  # passwords are never logged
 
 
 def test_login_failures_are_indistinguishable(catalog_client):
     client, _ = catalog_client
     register_and_login(client)
-    wrong_password = client.post("/auth/login", json={"email": "user@example.com", "password": "wrong password"})
-    unknown_email = client.post("/auth/login", json={"email": "nobody@example.com", "password": PASSWORD})
-    assert wrong_password.status_code == unknown_email.status_code == 401
-    assert wrong_password.json() == unknown_email.json()
+    wrong_password = client.post("/auth/login", json={"login": "user@example.com", "password": "wrong password"})
+    unknown_login = client.post("/auth/login", json={"login": "nobody", "password": PASSWORD})
+    assert wrong_password.status_code == unknown_login.status_code == 401
+    assert wrong_password.json() == unknown_login.json()
 
 
-def test_token_for_deleted_user_is_rejected(catalog_client):
+def test_token_for_deleted_user_is_rejected(catalog_client, vault):
     client, db = catalog_client
     headers = register_and_login(client)
-    db.delete(db.scalar(select(User).where(User.email == "user@example.com")))
+    db.delete(db.get(User, vault.find("user@example.com").id))
     db.flush()
     assert client.get("/auth/me", headers=headers).status_code == 401
 
 
-def test_build_lifecycle(catalog_client):
+def test_build_lifecycle(catalog_client, activity_log):
     client, db = catalog_client
     headers = register_and_login(client)
     selection = am5_build(db)
@@ -154,6 +260,9 @@ def test_build_lifecycle(catalog_client):
     assert deleted.status_code == 204
     assert client.get(f"/builds/{build['id']}", headers=headers).status_code == 404
     assert client.get("/builds", headers=headers).json() == []
+    actions = [line.split(" | ", 1)[1] for line in activity_log()][-2:]
+    assert actions == [f"BUILD_SAVED | email=user@example.com | build_id={build['id']} | name=Mid AM5 | parts=8",
+                       f"BUILD_DELETED | email=user@example.com | build_id={build['id']} | name=Mid AM5"]
 
 
 def test_saved_price_survives_price_change(catalog_client):
@@ -224,7 +333,7 @@ def test_out_of_stock_parts_have_no_price(catalog_client):
     assert body["saved_total_mdl"] == body["current_total_mdl"] == "0"
 
 
-def test_unknown_and_mismatched_components(catalog_client):
+def test_unknown_and_mismatched_components(catalog_client, activity_log):
     client, db = catalog_client
     headers = register_and_login(client)
     cpu, board = ids(db, "amd-ryzen-5-7600", "gigabyte-b650m-d3hp")
@@ -234,6 +343,9 @@ def test_unknown_and_mismatched_components(catalog_client):
                           headers=headers)
     assert swapped.status_code == 422
     assert db.scalar(select(BuildItem.build_id).limit(1)) is None
+    assert [line.split(" | ", 1)[1] for line in activity_log()][-2:] == [
+        "BUILD_SAVE_FAILED | email=user@example.com | name=PC | reason=Components not found",
+        "BUILD_SAVE_FAILED | email=user@example.com | name=PC | reason=Component category mismatch"]
 
 
 def test_users_cannot_see_or_change_each_others_builds(catalog_client):

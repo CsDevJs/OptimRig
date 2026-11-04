@@ -9,17 +9,25 @@ from app.db.models import Slot
 from app.schemas import ComponentRead, StoreRead
 
 
-class Credentials(BaseModel):
+Password = Annotated[str, Field(min_length=8, max_length=128)]
+
+
+class Registration(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     email: EmailStr
-    # bcrypt-era limits do not apply to argon2; the cap only blocks absurd payloads.
-    password: Annotated[str, Field(min_length=8, max_length=128)]
+    password: Password
+
+
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    login: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=254)] = Field(
+        description="Email")
+    password: Annotated[str, Field(min_length=1, max_length=128)]
 
 
 class UserRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: int
     email: str
     created_at: datetime

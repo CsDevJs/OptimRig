@@ -21,7 +21,15 @@ Python 3.12 or newer is recommended. Run all commands below from `backend/`.
    python -c "import secrets; print(secrets.token_urlsafe(48))"
    ```
 
-   `.env` is git-ignored. The app refuses to start without `JWT_SECRET`.
+   Also set `VAULT_KEY`, the key of the encrypted users vault (32 random bytes):
+
+   ```bash
+   python -c "import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
+   ```
+
+   `.env` is git-ignored. The app refuses to start without `JWT_SECRET` and a valid
+   `VAULT_KEY`. Back up `VAULT_KEY` somewhere other than the vault file: without it
+   no account can be read.
 
 3. Install dependencies, create the tables, and load the seed data (Linux/macOS):
 
@@ -57,7 +65,7 @@ Python 3.12 or newer is recommended. Run all commands below from `backend/`.
 | POST | `/compatibility/check` | Check a complete or partial selection without saving it |
 | POST | `/compatibility/filter` | AC-3 filtering of candidate components |
 | POST | `/auth/register` | Create an account; HTTP 409 if the email is taken |
-| POST | `/auth/login` | Get a bearer token; HTTP 401 for a wrong email or password |
+| POST | `/auth/login` | Get a bearer token (email); HTTP 401 for a wrong login or password |
 | GET | `/auth/me` | The logged-in user 🔒 |
 | GET / POST | `/builds` | List your saved builds / save a new one 🔒 |
 | GET / PUT / DELETE | `/builds/{build_id}` | Read, replace or delete one of your builds 🔒 |
@@ -95,11 +103,48 @@ yet implemented.
 
 ## Accounts and saved builds
 
-Register and log in with JSON `{"email": "...", "password": "..."}`. Emails are
-stored lowercased; passwords need 8–128 characters and are stored as argon2
-hashes. Login returns `access_token`, `token_type` (`bearer`) and `expires_in`
-(seconds, `ACCESS_TOKEN_MINUTES`, default 24 h). Wrong password and unknown
-email give the same 401, so accounts can't be probed.
+Register with `{"email": "...", "password": "..."}` and log in
+with `{"login": "<email>", "password": "..."}`. Emails are unique, compared without
+case. Passwords need 8–128 characters. Login returns `access_token`, `token_type`
+(`bearer`) and `expires_in` (seconds, `ACCESS_TOKEN_MINUTES`, default 24 h). Wrong
+password and unknown login give the same 401, so accounts can't be probed.
+
+**Where personal data is kept** (`app/vault.py`): the email and the password
+hash are in one file, `data/users.vault` (git-ignored, `VAULT_PATH` to move it),
+encrypted with AES-256-GCM using `VAULT_KEY`. GCM also authenticates: a changed or
+damaged file, or a wrong key, fails to open instead of giving wrong data. Every save
+uses a new random nonce and replaces the file atomically. The `users` table keeps
+only the id (saved builds point to it) and the creation time. The email can be
+decrypted; passwords are Argon2id hashes (`app/security.py`, salted, slow and
+memory-hard), so not even the key turns them back into passwords. Login checks the
+hash. Keep the key apart from the file and its backups.
+
+**Activity log** (`app/audit.py`): every account action is one line in
+`activity.log` inside `AUDIT_LOG_DIR` (default `backend/logs/`, git-ignored; set it in
+`.env` to any folder, e.g. `AUDIT_LOG_DIR=D:/pc-configurator-logs`). A
+`RotatingFileHandler` starts a new file at `AUDIT_LOG_MAX_BYTES` (default 5 MB) and
+keeps `AUDIT_LOG_BACKUP_COUNT` old ones (default 10: `activity.log.1` … `.10`).
+Actions: `REGISTERED`, `REGISTER_FAILED`, `LOGIN_OK`, `LOGIN_FAILED` (reason: wrong
+password, or no account with this email), `BUILD_SAVED`, `BUILD_SAVE_FAILED`,
+`BUILD_UPDATED`, `BUILD_UPDATE_FAILED`, `BUILD_DELETED`, `BUILD_DELETE_FAILED`.
+
+```
+2026-11-04 15:27:27 | LOGIN_FAILED | email=ana@exemplu.com | reason=wrong password
+2026-11-04 15:27:31 | BUILD_SAVED | email=ana@exemplu.com | build_id=2 | name=Gaming | parts=8
+```
+
+Passwords and tokens are never written. The file holds emails in plain text, so keep
+the folder private. Run the server with one worker process: `RotatingFileHandler`
+isn't safe when several processes write the same file.
+
+Decrypt and list the accounts (id, email):
+
+```bash
+.venv/bin/python -m scripts.vault show
+```
+
+Migration `0005` moves to this layout; it refuses to run while accounts with the old
+one-way hashes exist, since those passwords can't be recovered.
 
 Save a build with the same `components` shape as `/compatibility/check`, plus a
 `name` (1–100 characters):
