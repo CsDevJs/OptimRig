@@ -206,3 +206,54 @@ def test_gpu_clearance_from_manufacturer_text():
     assert gpu_clearance("VGA Card (Length):370mm • Max CPU cooler 160mm") == 370
     assert gpu_clearance("Поддержка видеокарт длиной до 400 мм") == 400
     assert gpu_clearance("GPU installation with a 160 mm riser") is None  # not a length limit
+
+
+# ---------- Pages that are not desktop PC parts ----------
+
+def test_accessories_external_and_server_parts_are_skipped():
+    skipped = [
+        (Category.STORAGE, "Carcasă externă ASUS TUF Gaming A1 M.2 NVMe", {"Tip unitate de stocare": "Carcasă externă"}),
+        (Category.STORAGE, "M.2 NVMe/SATA SSD Enclosure Asus TUF Gaming A2", {"Format": "M.2 2280"}),
+        (Category.STORAGE, "Cartelă de memorie GoodRAM 128GB", {"Form Factor": "micro-SD"}),
+        (Category.STORAGE, "SSD Synology SNV3510-800G", {"Form Factor": "M.2 22110"}),
+        (Category.STORAGE, "Unitate HDD Fujitsu S26361-F3297-L500 500 GB", {"Aplicare (Utilizare)": "Server"}),
+        (Category.PSU, "Xilence SATA Cable x4 for Modular Power Supply", {}),
+        (Category.PSU, "Fujitsu S26113-F574-L13", {}),
+        (Category.GPU, "Placă video externă Asus ROG XG Mobile GC31R-037 8 GB", {}),
+        (Category.RAM, "Memorie RAM 16 GB Synology D4EC-2666-16G", {}),
+        (Category.RAM, "Memorie RAM 32GB DDR4-3200 Samsung Reg. ECC M393A4K40EB3-CWE", {}),
+        (Category.RAM, "Memorie RAM 16 GB Dell AC958788", {"Form Factor": "ECC"}),
+        (Category.MOTHERBOARD, "Placă de bază BIOSTAR H61MHV3", {}),
+        (Category.MOTHERBOARD, "Материнская плата с процессором Biostar A68N-2100K", {}),
+    ]
+    for category, title, specs in skipped:
+        assert normalize(category, title, specs).skip, title
+
+
+def test_current_parts_are_not_mistaken_for_old_or_accessories():
+    kept = [
+        (Category.MOTHERBOARD, "Placă de bază Gigabyte B850M D3HP", {}),  # B850 is not B85
+        (Category.MOTHERBOARD, "Placă de bază ASRock H610M-HDV/M.2 R2.0", {}),  # H610 is not H61
+        (Category.MOTHERBOARD, "Placă de bază ASRock H810M-X", {}),
+        (Category.RAM, "Memorie RAM Kingston FURY Beast 32GB", {"Verificarea și corectarea erorilor (ECC)": "Nu-(non-ECC)"}),
+        (Category.STORAGE, "SSD Kingston NV3 1TB", {"Interfață": "PCI-E 4.0 x4", "Form Factor": "M.2 2280"}),
+    ]
+    for category, title, specs in kept:
+        assert normalize(category, title, specs).skip is None, title
+    # Darwin calls this CPU cooler a case fan; the name drops that word.
+    cooler = normalize(Category.COOLER, "Ventilator de carcasă Gamemax Ice Force Black",
+                       {"Sockets": "Intel: LGA1700, 1200, AMD: AM4, AM5", "Dimensiuni": "120 x 92 x 153 mm"})
+    assert cooler.skip is None and not cooler.model.lower().startswith("ventilator")
+
+
+def test_used_and_refurbished_parts_are_skipped():
+    for category, title, specs in [
+        (Category.GPU, "Видеокарта MSI GTX 1060 GAMING X 6G 6GB JetStream Used", {}),
+        (Category.CPU, "Процессор Intel Celeron G3930 Tray б/у", {}),
+        (Category.STORAGE, "HDD 1.0TB Western Digital WD10EURX AV-GP, Reconditionat", {}),
+        (Category.STORAGE, "Unitate HDD Seagate Exos 24 TB 3.5\"", {"Stare": "Refurbished"}),
+    ]:
+        assert normalize(category, title, specs).skip == "used or refurbished part", title
+    # "Fused" or a "Stare: Nou" (new) condition is not "used".
+    assert normalize(Category.STORAGE, "SSD Kingston NV3 1TB", {"Stare": "Nou", "Form Factor": "M.2 2280",
+                                                               "Interfață": "PCI-E 4.0 x4"}).skip is None
