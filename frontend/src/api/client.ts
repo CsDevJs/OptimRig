@@ -80,8 +80,9 @@ export const api = {
 
   register: (email: string, password: string) =>
     request<User>('/auth/register', { method: 'POST', body: { email, password } }),
-  login: (email: string, password: string) =>
-    request<Token>('/auth/login', { method: 'POST', body: { email, password } }),
+  /** `login` is the email. */
+  login: (login: string, password: string) =>
+    request<Token>('/auth/login', { method: 'POST', body: { login, password } }),
   me: () => request<User>('/auth/me'),
 
   builds: {

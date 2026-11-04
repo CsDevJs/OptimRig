@@ -14,3 +14,8 @@ venv/
 
 # Store pages fetched by scripts.import_catalog
 backend/.crawl-cache/
+
+# Encrypted users vault (backend/app/vault.py); its key is VAULT_KEY in backend/.env
+backend/data/
+# Activity log with users' emails (backend/app/audit.py)
+backend/logs/

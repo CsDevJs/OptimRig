@@ -8,7 +8,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.account_schemas import BuildItemRead, BuildRead, BuildSummary, BuildWrite
-from app.api.auth import CurrentUser
+from app.api.auth import CurrentUser, Vault, email_of
+from app.audit import log_action
 from app.api.catalog import component_response
 from app.db.models import Availability, Build, BuildItem, Component, Offer, SPEC_MODELS, Slot
 from app.db.session import get_db
@@ -100,13 +101,28 @@ def _build_response(db: Session, build: Build) -> BuildRead:
     )
 
 
+def _reason(error: HTTPException) -> str:
+    detail = error.detail
+    return detail.get("message", str(detail)) if isinstance(detail, dict) else str(detail)
+
+
 @router.post("", response_model=BuildRead, status_code=status.HTTP_201_CREATED)
-def create_build(payload: BuildWrite, user: CurrentUser, db: DbSession) -> BuildRead:
-    selection = load_selection(db, payload.components)
+def create_build(payload: BuildWrite, user: CurrentUser, db: DbSession, vault: Vault) -> BuildRead:
+    email = email_of(user, vault)
+    try:
+        selection = load_selection(db, payload.components)
+    except HTTPException as error:
+        log_action("BUILD_SAVE_FAILED", email, name=payload.name, reason=_reason(error))
+        raise
     build = Build(user=user, name=payload.name,
                   items=[_new_item(slot, component) for slot, component in selection.items()])
     db.add(build)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        log_action("BUILD_SAVE_FAILED", email, name=payload.name, reason="database error")
+        raise
+    log_action("BUILD_SAVED", email, build_id=build.id, name=payload.name, parts=len(selection))
     return _build_response(db, _owned_build(db, user.id, build.id))
 
 
@@ -126,26 +142,45 @@ def get_build(build_id: BuildId, user: CurrentUser, db: DbSession) -> BuildRead:
 
 
 @router.put("/{build_id}", response_model=BuildRead, responses=_NOT_FOUND)
-def replace_build(build_id: BuildId, payload: BuildWrite, user: CurrentUser, db: DbSession) -> BuildRead:
+def replace_build(build_id: BuildId, payload: BuildWrite, user: CurrentUser, db: DbSession,
+                  vault: Vault) -> BuildRead:
     """Replace the name and the whole selection.
 
     Parts that stay in the same slot keep their saved price; new parts get today's.
     """
-    build = _owned_build(db, user.id, build_id)
-    selection = load_selection(db, payload.components)
+    email = email_of(user, vault)
+    try:
+        build = _owned_build(db, user.id, build_id)
+        selection = load_selection(db, payload.components)
+    except HTTPException as error:
+        log_action("BUILD_UPDATE_FAILED", email, build_id=build_id, name=payload.name, reason=_reason(error))
+        raise
     kept = {(i.slot, i.component_id): i for i in build.items}
     build.name = payload.name
     build.items = [kept.get((slot.value, component.id)) or _new_item(slot, component)
                    for slot, component in selection.items()]
     # Changing only items doesn't touch the builds row, so onupdate wouldn't fire.
     build.updated_at = func.now()
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        log_action("BUILD_UPDATE_FAILED", email, build_id=build_id, name=payload.name, reason="database error")
+        raise
+    log_action("BUILD_UPDATED", email, build_id=build_id, name=payload.name, parts=len(selection))
     db.expire_all()
     return _build_response(db, _owned_build(db, user.id, build_id))
 
 
 @router.delete("/{build_id}", status_code=status.HTTP_204_NO_CONTENT, responses=_NOT_FOUND)
-def delete_build(build_id: BuildId, user: CurrentUser, db: DbSession) -> Response:
-    db.delete(_owned_build(db, user.id, build_id))
+def delete_build(build_id: BuildId, user: CurrentUser, db: DbSession, vault: Vault) -> Response:
+    email = email_of(user, vault)
+    try:
+        build = _owned_build(db, user.id, build_id)
+    except HTTPException as error:
+        log_action("BUILD_DELETE_FAILED", email, build_id=build_id, reason=_reason(error))
+        raise
+    name = build.name
+    db.delete(build)
     db.commit()
+    log_action("BUILD_DELETED", email, build_id=build_id, name=name)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

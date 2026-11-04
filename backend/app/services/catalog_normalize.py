@@ -117,10 +117,12 @@ def brand_of(title: str, labels: Labels) -> str | None:
     for b in _BRAND_RE:
         if named and plain(named).startswith(plain(b)):
             return b
+    # The brand named first in the title: Ultra's "ASUS PRIME B860-PLUS ... Intel B860" is an ASUS board.
     t = plain(title)
-    for b in _BRAND_RE:
-        if re.search(rf"(^|[\s(]){re.escape(plain(b))}([\s,)]|$)", t):
-            return b
+    found = [(m.start(), -len(b), b) for b in _BRAND_RE
+             if (m := re.search(rf"(^|[\s(]){re.escape(plain(b))}([\s,)]|$)", t))]
+    if found:
+        return min(found)[2]
     return named.strip() if named else None
 
 
@@ -132,10 +134,31 @@ def clean_model(title: str, brand: str | None) -> str:
     return re.sub(r"\s+", " ", name).strip(" ,-")[:200]
 
 
-def _mpn(labels: Labels, title: str) -> str | None:
+# Spec values that look like part numbers but are shared by many products: memory type and
+# speed ("DDR5-5600", "PC4-25600"), PSU standard and wattage ("ATX-550W"), sizes, interfaces.
+_SPEC_TOKEN = re.compile(
+    r"(?:LP)?G?DDR\d[A-Z]?(?:[-_ ]?\d{3,5}(?:MHZ|MT/S)?)?|PC\d?L?-?\d{4,5}[A-Z]?|(?:ATX|SFX|TFX)\d?(?:\.\d)?[-_]?\d{3,4}W?"
+    r"|\d+(?:[.,]\d+)?(?:GB|TB|MB|MHZ|MT/S|W|MM|CM|V)|\d+X\d+(?:GB|TB|MM)?|LGA\d{4}|PCIE?[\dX.]*|GEN\d(?:X\d)?"
+    r"|M\.2(?:[-/]\d+)?|\d{4}MHZ", re.I)
+# A board's chipset with a suffix ("B860-PLUS", "H610M-HDV/M.2") is a series name shared by
+# several boards (ASUS PRIME and TUF GAMING B860-PLUS); the model line in front of it matters.
+_BOARD_SERIES = re.compile(r"[ABHXZ]\d{3}[A-Z]?(?:[-/ ].*)?", re.I)
+
+
+def _part_number(token: str, category: Category) -> bool:
+    """Whether `token` can be a manufacturer part number for a product of `category`."""
+    token = token.strip()
+    if len(token) < 5 or not re.search(r"\d", token) or not re.search(r"[A-Za-z]", token):
+        return False
+    if _SPEC_TOKEN.fullmatch(token) or any(plain(token) == plain(b) for b in BRANDS):
+        return False
+    return not (category == Category.MOTHERBOARD and _BOARD_SERIES.fullmatch(token))
+
+
+def _mpn(labels: Labels, title: str, category: Category) -> str | None:
     """Manufacturer part number, when the page states one."""
     value = labels.get("articol", "cod model", "part number", "код производителя", "артикул")
-    if value and re.search(r"\d", value) and re.search(r"[A-Za-z]", value) and len(value) >= 5:
+    if value and _part_number(value, category):
         return value
     # PrimePC puts it in the full name: "SSD 500GB Kingston NV3 SNV3S/500G (M.2 ...)".
     full = labels.get("полное название")
@@ -143,9 +166,21 @@ def _mpn(labels: Labels, title: str) -> str | None:
         if not text:
             continue
         for token in re.findall(r"\b[A-Z0-9][A-Z0-9\-/.]{6,}[A-Z0-9]\b", text):
-            if re.search(r"\d", token) and re.search(r"[A-Z]", token) and not re.fullmatch(r"(DDR\d|PC\d-?\d+|\d+(GB|TB|MHZ|W))", token):
+            if re.search(r"[A-Z]", token) and _part_number(token, category):
                 return token
     return None
+
+
+def model_key(category: Category, model: str) -> str:
+    """The model name without what stores add after it, for products without a part number:
+    'PRIME B860-PLUS WIFI ATX' and 'PRIME B860-PLUS WIFI LGA1851 ATX Intel B860 | DDR5' -> 'PRIME B860-PLUS WIFI'."""
+    name = model
+    if category == Category.MOTHERBOARD:
+        # Ultra's RAM and drive titles carry the speed and size after "|", so only boards are cut there.
+        name = name.split("|")[0]
+        name = re.split(r"\b(?:LGA\s?\d{4}|AM[45]|socket|сокет)\b", name, maxsplit=1, flags=re.I)[0]
+        name = re.sub(r"\b(?:E-ATX|EATX|Micro-ATX|mATX|uATX|Mini-ITX|mITX|ATX)\s*$", "", name.strip(), flags=re.I)
+    return name.strip(" ,-")
 
 
 def _key(category: Category, *parts: str | None) -> str:
@@ -255,12 +290,15 @@ def motherboard(title: str, labels: Labels) -> dict:
     f["socket"] = socket_name(labels.get("socket", "сокет") or title)
     chipset = labels.get("chipset", "чипсет", exclude=("audio", "аудио", "retea"))
     m = _CHIPSET.search((chipset or "") + " " + title.upper())
-    f["chipset"] = m.group(1) if m else None
+    # "B860M-K" names a Micro-ATX B860 board: the M is the board size, not part of the chipset.
+    f["chipset"] = re.sub(r"(\d{3})M$", r"\1", m.group(1)) if m else None
     f["form_factor"] = board_form_factor(labels.get("form factor placa", "factor de forma a placii", "form factor",
                                                     "формфактор", "форм-фактор", exclude=("memorie", "m.2")) or title)
     mem = _memory_types(labels.get("tip memorie", "tip ram", "поддержка памяти", "form-factor memorie", "standard memorie")
                         or title)
     f["memory_type"] = mem[0] if len(mem) == 1 else None
+    # AM5 and LGA1851 boards take only DDR5, AM4 only DDR4 (Darwin lists the AM5 A620M H as DDR4).
+    f["memory_type"] = {"AM5": "DDR5", "LGA1851": "DDR5", "AM4": "DDR4"}.get(f["socket"], f["memory_type"])
     f["memory_slots"] = _int(labels.get("sloturi memorie", "numar sloturi ram", "sloturi ram", "количество планок",
                                         "слотов памяти", "sloturi memorie operativa"))
     f["max_memory_gb"] = _int(labels.get("capacitatea maxima", "capacitate max", "memorie maxima", "максимальный объем",
@@ -313,7 +351,26 @@ def ram(title: str, labels: Labels) -> tuple[dict, str | None]:
     if not f["cas_latency"]:
         m = re.search(r"\bCL\s?(\d{2})\b", title, re.I)
         f["cas_latency"] = int(m.group(1)) if m else None
+    # The part-number row first: Xstore cuts "KVR32N22D8/32" to "KVR32N22D8/3" in the title, and a
+    # PrimePC 8 GB page has "KF560C36BBEA-32" in its title but "-8" in its full name.
+    f.update(kingston_part(labels.get("articol", "cod model", "part number", "код производителя", "полное название") or "")
+             or kingston_part(title))
     return {k: v for k, v in f.items() if v is not None}, None
+
+
+# Kingston's part number states the specs (kingston.com memory part number decoder):
+# KF436C18BB2AK2/32 = FURY, DDR4, 3600 MT/s, CL18, kit of 2, 32 GB in total;
+# KVR32N22S8/8 = ValueRAM, 3200 MT/s, CL22, 8 GB. Store tables contradict it at times
+# (PrimePC: CL16 for KF436C18BB2AK2/32, Darwin: 32 GB for KF432C16RB2AK2/64).
+_KINGSTON = re.compile(r"\bK(?:F[45]|VR)(\d{2})[A-Z]?C?(\d{2})[A-Z0-9]*?(?:K(\d))?\s?[-/]\s?(\d{1,3})(?:GB?)?\b", re.I)
+
+
+def kingston_part(text: str) -> dict:
+    m = _KINGSTON.search(text)
+    if not m:
+        return {}
+    speed, cl, kit, total = m.groups()
+    return {"speed_mts": int(speed) * 100, "cas_latency": int(cl), "modules": int(kit or 1), "capacity_gb": int(total)}
 
 
 # ---------- GPU ----------
@@ -597,7 +654,7 @@ _NOT_A_PART = {
 # Only new parts are recommended: used, refurbished, reconditioned or recertified ones are
 # skipped (PrimePC writes "Used" / "б/у" in the title, Ultra "Stare: Refurbished").
 _USED = re.compile(r"\bused\b|б/у|\bб\.у\.|folosit|second[- ]?hand|refurbished|reconditionat|recondiționat"
-                   r"|recertified|восстановлен", re.I)
+                   r"|recertif\w*|восстановлен", re.I)
 # OEM server/NAS brands whose memory and power supplies fit only their own systems.
 _SERVER_BRANDS = re.compile(r"^(fujitsu|dell|hp|hpe|lenovo|synology|supermicro)\b", re.I)
 # DDR3-era chipsets (the schema models DDR4/DDR5 platforms only).
@@ -637,11 +694,18 @@ def normalize(category: Category, title: str, specs: dict[str, str]) -> Specs:
         return Specs(category=category, brand=brand, model=clean_model(title, brand),
                      key=_key(category, title), skip=reason)
     model = clean_model(title, brand)
-    mpn = _mpn(labels, title)
+    mpn = _mpn(labels, title, category)
+    # Without a part number the brand is part of the name: Sohoo and HPC both sell an "ATX-550W".
+    identity = mpn or f"{brand or ''} {model_key(category, model)}"
     skip, chip, power = None, None, None
     if category == Category.CPU:
         fields = cpu(title, labels)
-        chip = cpu_chip(" ".join(filter(None, [labels.get("model", "procesor", "полное название"), title])))
+        # The title first: Xstore's "Model" row says "Core Ultra 5 225" on the 225F page too.
+        chip = cpu_chip(title) or cpu_chip(labels.get("model", "procesor", "полное название") or "")
+        if chip and chip.startswith(("Core", "Pentium", "Celeron")):
+            # Intel's naming settles it (F = no graphics); store tables get it wrong both ways
+            # (Darwin: "Da" for the i5-14600KF, Neocomputer: "Nu" for the Core Ultra 5 225).
+            fields["integrated_graphics"] = not re.search(r"\d[A-Z]*F\b", chip)
         if chip is None:
             skip = "unknown CPU model"
         elif fields.get("socket") in ("LGA1150", "LGA1155", "AM3") or re.search(r"(?i)i\d-[2-4]\d{3}", chip):
@@ -652,32 +716,32 @@ def normalize(category: Category, title: str, specs: dict[str, str]) -> Specs:
     elif category == Category.MOTHERBOARD:
         fields = motherboard(title, labels)
         skip = fields.pop("_skip", None)
-        key = _key(category, mpn or model)
+        key = _key(category, identity)
     elif category == Category.RAM:
         fields, skip = ram(title, labels)
-        key = _key(category, mpn or model)
+        key = _key(category, identity)
     # Some "part numbers" are a series shared by several sizes (Apacer "AS2280P4", Gigabyte
     # "GV-R9060XTGAMING OC" for 8 and 16 GB), so the size is part of the identity.
     elif category == Category.GPU:
         fields = gpu(title, labels)
         chip = fields.get("chipset")
-        key = _key(category, mpn or model, f"{fields.get('vram_gb')}gb")
+        key = _key(category, identity, f"{fields.get('vram_gb')}gb")
         power = fields.get("tdp_w")
     elif category == Category.STORAGE:
         fields, skip = storage(title, labels)
         # Rounded to 100 GB so "1 TB" (1000) and "1024G" stay one drive.
         size = round(fields["capacity_gb"] / 100) if fields.get("capacity_gb") else None
-        key = _key(category, mpn or model, f"{size}x100gb")
+        key = _key(category, identity, f"{size}x100gb")
     elif category == Category.PSU:
         fields, skip = psu(title, labels)
-        key = _key(category, mpn or model, f"{fields.get('wattage')}w")
+        key = _key(category, identity, f"{fields.get('wattage')}w")
     elif category == Category.CASE:
         fields = case(title, labels)
         skip = fields.pop("_skip", None)
-        key = _key(category, mpn or model)
+        key = _key(category, identity)
     else:
         fields, skip = cooler(title, labels)
-        key = _key(category, mpn or model)
+        key = _key(category, identity)
     fields = _plausible(fields)
     maker = labels.get("на сайте производителя", "site producator", "pagina producatorului")
     maker = maker if maker and maker.startswith(("http://", "https://")) else None

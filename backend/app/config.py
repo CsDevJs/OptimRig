@@ -14,6 +14,22 @@ class Settings(BaseSettings):
     # Signs login tokens. Use a long random value; changing it logs everyone out.
     jwt_secret: str
     access_token_minutes: int = 60 * 24
+    # Encrypts the users' vault (email, password hash). Keep it out of git and away
+    # from the vault file: with both, anyone can read every account; losing it loses them.
+    vault_key: str
+    vault_path: Path = BACKEND_DIR / "data" / "users.vault"
+    # Activity log (app/audit.py): logins, failed logins, saved builds, each with the email.
+    # Any folder works, e.g. AUDIT_LOG_DIR=D:/pc-configurator-logs
+    audit_log_dir: Path = BACKEND_DIR / "logs"
+    audit_log_max_bytes: int = 5 * 1024 * 1024  # rotate at 5 MB
+    audit_log_backup_count: int = 10  # keep activity.log.1 ... activity.log.10
+
+    @field_validator("vault_key")
+    @classmethod
+    def valid_vault_key(cls, value: str) -> str:
+        from app.vault import decode_key
+        decode_key(value)
+        return value
 
     @field_validator("jwt_secret")
     @classmethod

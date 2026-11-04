@@ -7,7 +7,8 @@ interface AuthState {
   user: User | null
   /** True until a stored token has been checked against the server. */
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
+  /** `login` is the email. */
+  login: (login: string, password: string) => Promise<void>
   register: (email: string, password: string) => Promise<void>
   logout: () => void
 }
@@ -55,8 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }, [logout])
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { access_token } = await api.login(email, password)
+  const login = useCallback(async (loginName: string, password: string) => {
+    const { access_token } = await api.login(loginName, password)
     setAuthToken(access_token)
     storeToken(access_token)
     setUser(await api.me())

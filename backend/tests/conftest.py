@@ -1,4 +1,6 @@
 import os
+import tempfile
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,9 +13,36 @@ os.environ.setdefault(
     "DATABASE_URL", "postgresql+psycopg://unused:unused@127.0.0.1:1/unused"
 )
 os.environ.setdefault("JWT_SECRET", "test-only-secret-at-least-32-bytes-long")
+# A fixed test key; every test gets its own vault file (see `vault` below).
+os.environ.setdefault("VAULT_KEY", "dGVzdC1vbmx5LXZhdWx0LWtleS0zMi1ieXRlcy0hISE=")
+# The activity log goes to a temporary folder, never the real one.
+os.environ["AUDIT_LOG_DIR"] = tempfile.mkdtemp(prefix="pc-audit-")
 
 from app.db.session import get_db
 from app.main import app
+from app.vault import UserVault, decode_key, get_vault
+
+
+@pytest.fixture(autouse=True)
+def vault(tmp_path):
+    """A fresh encrypted vault in a temporary folder, so tests never touch backend/data."""
+    test_vault = UserVault(tmp_path / "users.vault", decode_key(os.environ["VAULT_KEY"]))
+    app.dependency_overrides[get_vault] = lambda: test_vault
+    yield test_vault
+    app.dependency_overrides.pop(get_vault, None)
+
+
+@pytest.fixture
+def activity_log():
+    """Returns a function that gives the activity-log lines written since the test started."""
+    path = Path(os.environ["AUDIT_LOG_DIR"]) / "activity.log"
+    start = path.stat().st_size if path.exists() else 0
+
+    def new_lines() -> list[str]:
+        with path.open(encoding="utf-8") as file:
+            file.seek(start)
+            return file.read().splitlines()
+    return new_lines
 
 
 @pytest.fixture

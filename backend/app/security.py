@@ -1,4 +1,7 @@
-"""Password hashing and login tokens, independent of FastAPI and the database."""
+"""Password hashing and login tokens, independent of FastAPI and the database.
+
+The hash is stored in the encrypted users vault (app/vault.py).
+"""
 
 from datetime import UTC, datetime, timedelta
 
@@ -8,9 +11,11 @@ from argon2.exceptions import InvalidHashError, VerificationError
 
 from app.config import settings
 
+# Argon2id with the library's defaults (RFC 9106 / OWASP): slow and memory-hard, so
+# guessing passwords from a stolen hash is expensive. Each hash has its own random salt.
 _hasher = PasswordHasher()
 _ALGORITHM = "HS256"
-# Verified against when the email is unknown, so a failed login takes the same
+# Verified against when the login is unknown, so a failed login takes the same
 # time whether or not the account exists.
 _DUMMY_HASH = _hasher.hash("not-a-real-password")
 

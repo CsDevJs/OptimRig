@@ -2,7 +2,8 @@
 
 Run through `python -m scripts.import_catalog load`. Steps:
 1. normalize every store page into our specs and skip what isn't a desktop PC part;
-2. merge pages of the same product (part number, or CPU model + Box/Tray);
+2. merge pages of the same product (part number, or CPU model + Box/Tray); pages whose key specs
+   disagree, or two pages of one store, stay separate products. The load stops on any merge conflict (merge_conflicts);
 3. fill missing specs (catalog_merge: platform facts, same-chip cards, PassMark chip pages);
 4. perf_score for CPUs and GPUs from PassMark, for imported and hand-entered parts alike;
 5. upsert components, specs and in-stock offers. A product whose page URL is already an
@@ -27,7 +28,7 @@ from sqlalchemy.orm import selectinload
 from app.db.models import SPEC_MODELS, Availability, BuildItem, Category, Component, Offer as OfferRow, Store, Tier
 from app.db.session import SessionLocal
 from app.services.catalog_merge import (
-    OPTIONAL, REQUIRED, Offer, Product, benchmark_scores, cpu_facts, gpu_clearance, gpu_from_chip, merge, other_facts,
+    OPTIONAL, REQUIRED, Offer, Product, benchmark_scores, cpu_facts, gpu_clearance, gpu_from_chip, merge, merge_conflicts, other_facts,
     power_draw, tiers,
 )
 from app.services.catalog_normalize import cpu_chip, normalize
@@ -161,6 +162,11 @@ def load(products_file: Path) -> None:
                                    None if regular is None else Decimal(regular))))
     products = merge(pages)
     print(f"{len(records)} in-stock pages -> {len(products)} products ({sum(skipped.values())} pages skipped: {skipped})")
+    conflicts = merge_conflicts(products)
+    if conflicts:
+        # Nothing is written: a product made of pages that are not one product would reach the database.
+        REPORT.write_text(json.dumps({"merge_conflicts": conflicts}, ensure_ascii=False, indent=1), encoding="utf-8")
+        raise SystemExit(f"Load stopped: {len(conflicts)} merge conflicts (also in {REPORT}):\n" + "\n".join(conflicts))
 
     fetcher = Fetcher()
     cpu_marks, gpu_marks = _marks(fetcher, PASSMARK_CPU), _marks(fetcher, PASSMARK_GPU)
@@ -182,7 +188,6 @@ def load(products_file: Path) -> None:
         hand_entered = set(re.findall(r"^\s*\('([a-z0-9-]+)', '(?:cpu|motherboard|ram|gpu|storage|psu|case|cooler)'",
                                       SEED.read_text(encoding="utf-8"), re.M))
         by_url = {o.url: c for c in existing for o in c.offers}
-        row_by_url = {o.url: o for c in existing for o in c.offers}
         claimed: set[int] = set()
         used_slugs = {c.slug for c in existing}
         used_names = {(c.brand.lower(), c.model.lower()) for c in existing}
@@ -202,6 +207,7 @@ def load(products_file: Path) -> None:
         today = date.today()
         report = {"skipped_pages": skipped, "unscored_chips": unscored, "without_specs": [], "filled": {}}
         created = updated = offers_written = 0
+        assigned: list[tuple[Component, Product]] = []
 
         for p in scored:
             if p.key.startswith("existing:"):
@@ -249,25 +255,26 @@ def load(products_file: Path) -> None:
                     report["filled"][name] = p.filled
             if p.perf_score is not None and p.category in (Category.CPU, Category.GPU):
                 component.perf_score, component.perf_source = Decimal(str(p.perf_score)), p.perf_source
-            have = {o.store_id: o for o in component.offers} if component in existing else {}
+            assigned.append((component, p))
+
+        # Offers are rewritten from today's pages: a page's offer belongs to the component its
+        # product went to, wherever an earlier (possibly wrong) merge had put it. First every offer
+        # of an updated component and every offer of a page seen today is removed (through the
+        # relationship, so deleting a stale component later can't take a moved offer with it);
+        # a hand-entered component keeps the offers of stores that sell it no more today.
+        run_urls = {o.url for _, p in assigned for o in p.offers}
+        run_stores = {component.id: {stores[o.store].id for o in p.offers} for component, p in assigned}
+        for c in existing:
+            for row in list(c.offers):
+                if row.url in run_urls or (c.id in claimed and (c.slug not in hand_entered
+                                                                 or row.store_id in run_stores[c.id])):
+                    c.offers.remove(row)
+        db.flush()
+        for component, p in assigned:
             for o in p.offers:
-                store = stores[o.store]
-                row = have.get(store.id)
-                page_row = row_by_url.get(o.url)
-                if page_row is not None and page_row.component_id != component.id:
-                    # This page's offer sits on the component it was wrongly merged into: move it.
-                    if row is None:
-                        page_row.component_id, row = component.id, page_row
-                    else:
-                        db.delete(page_row)
-                    row_by_url.pop(o.url)
-                if row is None:
-                    row = OfferRow(component_id=component.id, store_id=store.id, url=o.url)
-                    db.add(row)
-                row.url = o.url
-                have[store.id] = row
-                row.price_mdl, row.regular_price_mdl = o.price, o.regular_price
-                row.availability, row.checked_on, row.last_check_status = Availability.IN_STOCK, today, "ok"
+                component.offers.append(OfferRow(
+                    store_id=stores[o.store].id, url=o.url, price_mdl=o.price, regular_price_mdl=o.regular_price,
+                    availability=Availability.IN_STOCK, checked_on=today, last_check_status="ok"))
                 offers_written += 1
 
         # Imported components this run no longer produces (now skipped, e.g. SAS drives, or

@@ -71,8 +71,7 @@ export function AccountPage() {
           </div>
           <div>
             <span className="px-2 py-0.5 rounded-full bg-violet-400/15 border border-violet-400/30 text-violet-200 text-[10px] font-semibold">Cont activ</span>
-            <h2 className="text-xl font-extrabold text-white mt-1">{user.email.split('@')[0]}</h2>
-            <p className="text-xs text-slate-400">{user.email}</p>
+            <h2 className="text-xl font-extrabold text-white mt-1">{user.email}</h2>
           </div>
         </div>
         <Link to="/manual" onClick={() => replace({})}

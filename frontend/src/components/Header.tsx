@@ -122,7 +122,7 @@ function AccountButtons() {
     <div className="flex items-center gap-2">
       <Link to="/cont" className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-violet-400/40 text-xs hover:border-violet-400 transition">
         <UserCog size={14} className="text-violet-300" />
-        <span className="font-bold text-white truncate max-w-[110px]">{user.email.split('@')[0]}</span>
+        <span className="font-bold text-white truncate max-w-[160px]">{user.email}</span>
       </Link>
       <button type="button" title="Deconectare" aria-label="Deconectare"
         onClick={() => { logout(); navigate('/'); toast({ title: 'Deconectat', message: 'Ai ieșit din cont.', tone: 'ok' }) }}

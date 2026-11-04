@@ -313,10 +313,10 @@ class Offer(Base):
 class User(Base):
     __tablename__ = "users"
 
+    """An account. Its email and password are not here: they are in the
+    encrypted users vault (app/vault.py), under this id."""
+
     id: Mapped[int] = mapped_column(primary_key=True)
-    # Stored lowercased so "A@x.md" and "a@x.md" are the same account.
-    email: Mapped[str] = mapped_column(String(254), unique=True)
-    password_hash: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     builds: Mapped[list["Build"]] = relationship(back_populates="user", cascade="all, delete-orphan")
