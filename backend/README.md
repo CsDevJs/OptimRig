@@ -284,8 +284,19 @@ drives and memory cards; SAS and M.2 22110 data-center drives; external GPUs; PS
 cables and adapters; cases with a built-in PSU; TFX/Flex PSUs; case fans and other
 cooling accessories. Retail enterprise SATA HDDs (Seagate Exos, WD Gold) are kept:
 they work in a desktop.
-Pages of the same product are merged (by part number; CPUs by model + Box/Tray),
-with the cheapest page per store. Missing values are filled, in this order
+Pages of the same product are merged (by part number; CPUs by model + Box/Tray). A
+spec is never taken as a part number (`DDR5-5600`, `PC4-25600`, `ATX-550W`), nor is a
+board's bare series name (`B860-PLUS` is ASUS PRIME and TUF GAMING): without a part
+number the brand and full model name are the identity. Pages under one identity that
+disagree on a key spec (RAM size, sticks, speed, CL; board chipset and memory type;
+CPU graphics; drive size; VRAM; PSU wattage), and two pages of one store, stay separate
+products. Kingston's part number states its specs and overrides the store's table;
+Intel's name settles graphics (F = none); an AM5/LGA1851 board takes DDR5, AM4 DDR4.
+`load` stops and lists every merge conflict (`merge_conflicts`) before writing
+anything; `tests/test_catalog_import.py::test_whole_crawl_merges_without_conflicts`
+runs the same check over the last crawl, and `python -m scripts.spot_check 10`
+compares 10 random merged products per store with the live pages.
+Missing values are filled, in this order
 (`app/services/catalog_merge.py`):
 
 1. the value most of the product's pages agree on;

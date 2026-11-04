@@ -1,10 +1,14 @@
+import json
 import random
+import re
 from decimal import Decimal
+
+import pytest
 
 from app.db.models import Category, Component, CpuSpec
 from app.services.ac3 import filter_catalog, filter_domains
-from app.services.catalog_merge import Offer, Product, cpu_facts, gpu_from_chip, merge
-from app.services.catalog_normalize import cpu_chip, gpu_chip, normalize
+from app.services.catalog_merge import Offer, Product, cpu_facts, gpu_from_chip, merge, merge_conflicts
+from app.services.catalog_normalize import _mpn, Labels, cpu_chip, gpu_chip, kingston_part, normalize
 from app.services.compatibility import SelectedPart
 from app.services.recommend import Candidate, OPTIONAL, _dominates, _strict_fit, pareto, prefilter, signature
 from app.services.store_catalog import listing_products, neocomputer_candidates
@@ -127,14 +131,14 @@ def _page(store, title, specs, price, category=Category.CPU):
     return normalize(category, title, specs), Offer(store, f"https://{store}/{price}", D(price), None)
 
 
-def test_merge_keeps_cheapest_page_per_store_and_fills_platform_facts():
+def test_merge_joins_stores_keeps_two_pages_of_one_store_apart_and_fills_platform_facts():
     products = merge([
         _page("xstore", "Procesor AMD Ryzen 5 7600 Tray", {"Numărul de nuclee": "6"}, "2500"),
         _page("darwin", "Procesor AMD Ryzen 5 7600 Tray", {"Numărul de nuclee": "6"}, "2400"),
         _page("darwin", "Procesor AMD Ryzen 5 7600, Tray", {}, "2450"),
     ])
-    assert len(products) == 1
-    p = products[0]
+    assert len(products) == 2 and not merge_conflicts(products)
+    p = next(p for p in products if len(p.offers) == 2)
     assert sorted((o.store, o.price) for o in p.offers) == [("darwin", D("2400")), ("xstore", D("2500"))]
     cpu_facts(p)
     assert (p.fields["socket"], p.fields["memory_types"], p.fields["integrated_graphics"]) == ("AM5", ["DDR5"], True)
@@ -257,3 +261,98 @@ def test_used_and_refurbished_parts_are_skipped():
     # "Fused" or a "Stare: Nou" (new) condition is not "used".
     assert normalize(Category.STORAGE, "SSD Kingston NV3 1TB", {"Stare": "Nou", "Form Factor": "M.2 2280",
                                                                "Interfață": "PCI-E 4.0 x4"}).skip is None
+
+
+# ---------- product identity: part numbers, key specs, merge conflicts ----------
+
+def test_specs_and_series_names_are_not_part_numbers():
+    ram, board = Category.RAM, Category.MOTHERBOARD
+    for title in ["Memorie RAM 32GB DDR5-5600 Kingston ValueRAM", "Memorie RAM 8GB PC4-25600 Kingston",
+                  "Memorie RAM 16GB DDR4-3200MHZ Kingston"]:
+        assert _mpn(Labels({}), title, ram) is None, title
+    assert _mpn(Labels({}), "Sursă de alimentare Sohoo ATX-550W", Category.PSU) is None
+    assert _mpn(Labels({}), "Placă de bază ASUS TUF GAMING B860-PLUS WIFI", board) is None
+    assert _mpn(Labels({}), "Placă de bază ASRock H610M-HDV/M.2 R2.0", board) is None
+    # The spec in front of the part number is passed over, not taken.
+    assert _mpn(Labels({}), "Memorie RAM 8GB DDR5-5600 Transcend JetRam JM5600ALG-8G", ram) == "JM5600ALG-8G"
+    assert _mpn(Labels({"Cod model": "DDR5-5600"}), "Memorie RAM 8GB DDR5-5600 Kingston Fury Beast, KF556C40BB-8",
+                ram) == "KF556C40BB-8"
+
+
+def test_neocomputer_ram_of_one_speed_is_not_one_product():
+    key = lambda title: normalize(Category.RAM, title, {"Garantie": "60 Luni"}).key
+    transcend = key("Memorie RAM 8GB DDR5-5600 Transcend JetRam JM5600ALG-8G")
+    assert transcend == normalize(Category.RAM, "Memorie RAM Transcend JetRam, JM5600ALG-8G", {}).key
+    others = {key("Memorie RAM 32GB DDR5-5600 Kingston ValueRAM"), key("Memorie RAM 16GB DDR5-5600 Apacer NOX"),
+              key("Memorie RAM 16GB DDR5-5600 Kingston Fury Beast DDR5 White RGB Expo")}
+    assert len(others) == 3 and transcend not in others
+
+
+def test_board_names_keep_their_model_line_and_match_across_stores():
+    key = lambda title: normalize(Category.MOTHERBOARD, title, {}).key
+    prime = key("Placă de bază ASUS PRIME B860-PLUS WIFI")
+    assert prime != key("Placă de bază ASUS TUF GAMING B860-PLUS WIFI")
+    assert prime == key("Placă de bază Asus PRIME B860-PLUS WIFI ATX")
+    assert prime == key("Placă de bază ASUS PRIME B860-PLUS WIFI LGA1851 ATX Intel B860 | DDR5 SDRAM | 4x DIMM")
+    assert key("Sursă de alimentare HPC ATX-550W") != key("Sursă de alimentare Sohoo ATX-550W")
+    # The M of "B860M-K" is the board size, not part of the chipset.
+    assert normalize(Category.MOTHERBOARD, "Placă de bază ASUS PRIME B860M-K", {}).fields["chipset"] == "B860"
+
+
+def test_kingston_part_number_states_the_specs():
+    assert kingston_part("KF436C18BB2AK2/32") == {"speed_mts": 3600, "cas_latency": 18, "modules": 2, "capacity_gb": 32}
+    assert kingston_part("KVR32N22S8/8") == {"speed_mts": 3200, "cas_latency": 22, "modules": 1, "capacity_gb": 8}
+    assert kingston_part("KF556C36BBE-32") == {"speed_mts": 5600, "cas_latency": 36, "modules": 1, "capacity_gb": 32}
+    # A store's wrong table (CL16) gives way to the part number.
+    specs = normalize(Category.RAM, "Оперативная память Kingston FURY Beast RGB Kit DDR4 2x16GB 3600MHz "
+                                    "KF436C18BB2AK2/32", {"Латентность": "CL16"})
+    assert specs.fields["cas_latency"] == 18
+
+
+def test_intel_f_models_have_no_graphics_whatever_the_table_says():
+    f = normalize(Category.CPU, "Procesor Intel Core i5-14600KF 2.60 GHz - 5.30 GHz Tray", {"Grafica integrata": "Da"})
+    plain = normalize(Category.CPU, "Procesor Intel Core Ultra 5 225, Tray", {"Grafica integrata": "Nu"})
+    # Xstore's "Model" row says "Core Ultra 5 225" on the 225F page.
+    xstore_f = normalize(Category.CPU, "Procesor Intel Core Ultra 5 225F, Tray", {"Model": "Intel Core Ultra 5 225"})
+    assert f.fields["integrated_graphics"] is False and plain.fields["integrated_graphics"] is True
+    assert xstore_f.chip == "Core Ultra 5 225F" and xstore_f.key != plain.key
+
+
+def test_merge_splits_pages_whose_key_specs_disagree():
+    ram = lambda store, title, specs, price: _page(store, title, specs, price, Category.RAM)
+    products = merge([
+        ram("xstore", "Memorie RAM Goodram, GR5600D564L46/32G", {"Capacitatea totală": "32 GB", "Latența": "CL46"}, "1"),
+        ram("darwin", "Memorie RAM Goodram GR5600D564L46/32G", {"Capacitatea totală": "16 GB", "Latența": "CL46"}, "2"),
+        ram("ultra", "Memorie RAM Goodram GR5600D564L46/32G", {"Capacitatea totală": "32 GB"}, "3"),
+    ])
+    assert sorted(sorted(o.store for o in p.offers) for p in products) == [["darwin"], ["ultra", "xstore"]]
+    assert len({p.key for p in products}) == 2 and not merge_conflicts(products)
+
+
+def test_merge_conflicts_lists_every_product_that_is_not_one_product():
+    a = normalize(Category.RAM, "Memorie RAM 8GB DDR5-5600 Transcend JetRam JM5600ALG-8G", {})
+    b = normalize(Category.RAM, "Memorie RAM 32GB DDR5-5600 Kingston ValueRAM", {})
+    offers = [Offer("neocomputer", "https://neo/a", D("1"), None), Offer("neocomputer", "https://neo/b", D("2"), None)]
+    bad = Product(Category.RAM, "ram:ddr55600", "Kingston", "x", None, {}, offers, pages=[a, b])
+    conflicts = merge_conflicts([bad])
+    assert any("2 pages of neocomputer" in c for c in conflicts)
+    assert any("capacity_gb [8, 32]" in c for c in conflicts)
+
+
+def test_whole_crawl_merges_without_conflicts():
+    """Every page of the last crawl, normalized and merged: no product may hold two pages of one
+    store or pages whose key specs disagree, and no identity key may be a spec."""
+    from scripts.import_catalog import PRODUCTS
+    if not PRODUCTS.exists():
+        pytest.skip("no crawl in .crawl-cache (run `python -m scripts.import_catalog crawl`)")
+    pages = []
+    for r in json.loads(PRODUCTS.read_text(encoding="utf-8")):
+        if not r["title"] or r["title"].startswith("Купить"):
+            continue
+        specs = normalize(Category(r["category"]), r["title"], r["specs"])
+        if not specs.skip:
+            pages.append((specs, Offer(r["store"], r["url"], D(r["offer"]["price"]), None)))
+    products = merge(pages)
+    assert merge_conflicts(products) == []
+    spec_keys = [p.key for p in products if re.fullmatch(r"ram:(l?p?ddr\d+|pc\d+)\d*(#\d+)?", p.key)]
+    assert spec_keys == []

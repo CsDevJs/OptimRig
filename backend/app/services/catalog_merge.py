@@ -62,6 +62,7 @@ class Product:
     perf_score: float | None = None
     perf_source: str | None = None
     maker_url: str | None = None
+    pages: list[Specs] = field(default_factory=list)  # what each store page said, in offer order
 
     @property
     def missing(self) -> list[str]:
@@ -82,27 +83,93 @@ def _mode(values: list):
     return list(best) if isinstance(best, tuple) else best
 
 
+# Specs that tell products apart: pages under one identity key that disagree on one of these
+# are different products (a part number guessed wrong, a series name shared by several sizes).
+KEY_SPECS: dict[Category, tuple[str, ...]] = {
+    Category.CPU: ("integrated_graphics",),
+    Category.MOTHERBOARD: ("chipset", "memory_type"),
+    Category.RAM: ("capacity_gb", "modules", "speed_mts", "cas_latency"),
+    Category.GPU: ("vram_gb",),
+    Category.STORAGE: ("capacity_gb",),
+    Category.PSU: ("wattage",),
+}
+
+
+def key_specs(specs: Specs) -> dict:
+    """The page's key specs that it states. Drive sizes are compared in 100 GB steps, so "1 TB"
+    (1000) and "1024 GB" agree; chipsets without the letter after the number, which stores
+    write differently for the same board (A620 / A620A, B650 / B650E)."""
+    out = {}
+    for name in KEY_SPECS.get(specs.category, ()):
+        value = specs.fields.get(name)
+        if value is None:
+            continue
+        if specs.category == Category.STORAGE:
+            value = round(value / 100)
+        elif name == "chipset":
+            value = re.match(r"[A-Z]+\d*", value).group()
+        out[name] = value
+    return out
+
+
+def _disagree(a: dict, b: dict) -> list[str]:
+    return [n for n in a.keys() & b.keys() if a[n] != b[n]]
+
+
+def _split(items: list[tuple[Specs, Offer]]) -> list[list[tuple[Specs, Offer]]]:
+    """Pages of one identity key, grouped so no group holds two pages of one store or pages
+    whose key specs disagree. Pages stating more key specs are placed first."""
+    clusters: list[list[tuple[Specs, Offer]]] = []
+    for specs, offer in sorted(items, key=lambda i: (-len(key_specs(i[0])), i[1].store, i[1].url)):
+        mine = key_specs(specs)
+        for cluster in clusters:
+            if all(o.store != offer.store and not _disagree(mine, key_specs(s)) for s, o in cluster):
+                cluster.append((specs, offer))
+                break
+        else:
+            clusters.append([(specs, offer)])
+    return clusters
+
+
 def merge(pages: list[tuple[Specs, Offer]]) -> list[Product]:
-    """One Product per identity key; a store's cheapest page wins when it lists a product twice."""
+    """One Product per identity key and set of agreeing pages: two pages of one store, or pages
+    whose key specs disagree, are different products."""
     groups: dict[str, list[tuple[Specs, Offer]]] = {}
     for specs, offer in pages:
         groups.setdefault(specs.key, []).append((specs, offer))
     products = []
     for key, items in groups.items():
-        specs_list = [s for s, _ in items]
-        names = set().union(*(s.fields for s in specs_list))
-        fields = {n: _mode([s.fields.get(n) for s in specs_list]) for n in names}
-        by_store: dict[str, Offer] = {}
-        for _, offer in sorted(items, key=lambda i: i[1].price):
-            by_store.setdefault(offer.store, offer)
-        first = specs_list[0]
-        products.append(Product(
-            category=first.category, key=key,
-            brand=_mode([s.brand for s in specs_list]) or "Unknown",
-            model=min((s.model for s in specs_list), key=len), chip=_mode([s.chip for s in specs_list]),
-            fields=fields, offers=list(by_store.values()), maker_url=_mode([s.maker_url for s in specs_list]),
-        ))
+        for n, cluster in enumerate(_split(items), start=1):
+            specs_list = [s for s, _ in cluster]
+            names = set().union(*(s.fields for s in specs_list))
+            fields = {f: _mode([s.fields.get(f) for s in specs_list]) for f in names}
+            first = specs_list[0]
+            products.append(Product(
+                category=first.category, key=key if n == 1 else f"{key}#{n}",
+                brand=_mode([s.brand for s in specs_list]) or "Unknown",
+                model=min((s.model for s in specs_list), key=len), chip=_mode([s.chip for s in specs_list]),
+                fields=fields, offers=[o for _, o in cluster], maker_url=_mode([s.maker_url for s in specs_list]),
+                pages=specs_list,
+            ))
     return products
+
+
+def merge_conflicts(products: list[Product]) -> list[str]:
+    """Every product whose pages are not one product: two pages of one store, pages whose key
+    specs or brands disagree. The import stops when this is not empty."""
+    out = []
+    for p in products:
+        stores = Counter(o.store for o in p.offers)
+        urls = ", ".join(o.url for o in p.offers)
+        for store, count in stores.items():
+            if count > 1:
+                out.append(f"{p.key}: {count} pages of {store} ({urls})")
+        stated = [key_specs(s) for s in p.pages]
+        for name in KEY_SPECS.get(p.category, ()):
+            values = {s[name] for s in stated if name in s}
+            if len(values) > 1:
+                out.append(f"{p.key}: pages disagree on {name} {sorted(values)} ({urls})")
+    return out
 
 
 def cpu_facts(product: Product) -> None:
