@@ -75,3 +75,22 @@ src/
 `npm run build` produces static files in `dist/`. Serve them so that `/api` reaches
 the backend (a reverse proxy), or build with `VITE_API_BASE=https://api.example.com`
 and enable CORS for the site's origin in the backend.
+
+### Netlify
+
+`netlify.toml` (repository root) builds this folder and publishes `dist/`. Netlify
+serves only the frontend; the backend runs on its own server (it needs PostgreSQL
+and keeps `data/users.vault` and `logs/` on disk).
+
+1. In Netlify, *Add new site → Import an existing project* and pick this
+   repository. The base directory, build command and publish folder come from
+   `netlify.toml`.
+2. In *Site configuration → Environment variables*, set `BACKEND_URL` to the
+   backend's public URL, e.g. `https://api.example.com`. The build fails without it.
+3. Deploy.
+
+`scripts/netlify-redirects.mjs` writes `dist/_redirects` at build time so that
+`/api/*` is proxied to `BACKEND_URL` (prefix stripped, as in development). The
+browser only talks to the Netlify origin, so the backend needs no CORS setup. Any
+other path that isn't a file serves `index.html`, so links like `/manual` and page
+reloads work. After changing `BACKEND_URL`, redeploy.
