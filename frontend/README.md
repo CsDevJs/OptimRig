@@ -87,6 +87,8 @@ and keeps `data/users.vault` and `logs/` on disk).
    `netlify.toml`.
 2. In *Site configuration → Environment variables*, set `BACKEND_URL` to the
    backend's public URL, e.g. `https://api.example.com`. The build fails without it.
+   To run the backend on your own computer, use its ngrok address; see
+   "Running the public site from this computer" in `backend/README.md`.
 3. Deploy.
 
 `scripts/netlify-redirects.mjs` writes `dist/_redirects` at build time so that
