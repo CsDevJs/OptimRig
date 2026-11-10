@@ -53,6 +53,34 @@ Python 3.12 or newer is recommended. Run all commands below from `backend/`.
    OpenAPI schema: <http://127.0.0.1:8000/openapi.json>.
    The API does not create tables or seed data automatically.
 
+## Running the public site from this computer
+
+The Vercel site (see `frontend/README.md`) can use the API running on your own
+computer. An [ngrok](https://ngrok.com) tunnel gives it a fixed public HTTPS
+address; PostgreSQL, the users vault and the logs stay on your computer, and only
+the API port is reachable from outside. The site works while the script below is
+running and shows "Serverul nu este pornit momentan" when it isn't.
+
+One-time setup:
+
+1. Create a free ngrok account, install ngrok (`winget install ngrok.ngrok`) and
+   run `ngrok config add-authtoken <your token>` (the token is on the ngrok dashboard).
+2. On the ngrok dashboard, under *Domains*, claim your free static domain, for
+   example `your-name.ngrok-free.app`.
+3. Add it to `.env`: `NGROK_DOMAIN=your-name.ngrok-free.app`.
+4. In `frontend/vercel.json`, put `your-name.ngrok-free.app` in the `/api/:path*`
+   rewrite and commit. This is needed only once, because the domain doesn't change.
+
+Then, whenever you want the site to work, double-click `scripts\start-public.cmd`
+(or run `powershell -ExecutionPolicy Bypass -File scripts\start-public.ps1`). It
+starts the API, waits until it can reach the database, and opens the tunnel.
+Ctrl+C or closing the window stops both. Your computer has to stay on and awake
+while it runs.
+
+To start it automatically when you log in to Windows, press Win+R, open
+`shell:startup`, and put a shortcut to `scripts\start-public.cmd` there.
+PostgreSQL normally runs as a Windows service, so it is already up by then.
+
 ## API
 
 | Method | Path | Result |

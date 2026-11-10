@@ -75,3 +75,22 @@ src/
 `npm run build` produces static files in `dist/`. Serve them so that `/api` reaches
 the backend (a reverse proxy), or build with `VITE_API_BASE=https://api.example.com`
 and enable CORS for the site's origin in the backend.
+
+### Vercel
+
+`vercel.json` (in this folder) builds the app and publishes `dist/`. Vercel serves
+only the frontend; the backend runs on its own server, for example your own
+computer (see "Running the public site from this computer" in `backend/README.md`).
+
+1. In `vercel.json`, replace `YOUR-NGROK-DOMAIN.ngrok-free.app` in the `/api/:path*`
+   rewrite with your backend's address, e.g. `your-name.ngrok-free.app`, and commit.
+   The build fails while the placeholder is still there.
+2. In Vercel, *Add New → Project*, import this repository, and set **Root
+   Directory** to `frontend`. The build settings come from `vercel.json`.
+3. Deploy.
+
+The `/api/*` rewrite proxies requests to the backend with the prefix stripped, as
+in development, so the browser only talks to the Vercel site and the backend needs
+no CORS setup. Any other path that isn't a file serves `index.html`, so links like
+`/manual` and page reloads work. After changing the backend address, commit and
+Vercel redeploys.

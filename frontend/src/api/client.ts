@@ -15,6 +15,8 @@ export class ApiError extends Error {
   }
 }
 
+const SERVER_OFFLINE = 'Serverul nu este pornit momentan. Încearcă din nou mai târziu.'
+
 let authToken: string | null = null
 export function setAuthToken(token: string | null) {
   authToken = token
@@ -37,6 +39,9 @@ async function request<T>(path: string, init: { method?: string; body?: unknown 
   const headers: Record<string, string> = {}
   if (init.body !== undefined) headers['Content-Type'] = 'application/json'
   if (authToken) headers.Authorization = `Bearer ${authToken}`
+  // When the backend is reached through a free ngrok tunnel, this skips ngrok's
+  // "you are about to visit" page, which would otherwise replace the JSON answer.
+  headers['ngrok-skip-browser-warning'] = '1'
 
   let response: Response
   try {
@@ -46,9 +51,13 @@ async function request<T>(path: string, init: { method?: string; body?: unknown 
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
     })
   } catch {
-    throw new ApiError(0, 'Serverul nu răspunde. Rulează backend-ul pe portul 8000?')
+    throw new ApiError(0, SERVER_OFFLINE)
   }
   if (response.status === 204) return undefined as T
+  const isJson = response.headers.get('content-type')?.includes('application/json') ?? false
+  // FastAPI always answers in JSON. A non-JSON error comes from whatever sits in front
+  // of it (the Vercel proxy, the tunnel) and means the backend isn't running.
+  if (!response.ok && !isJson) throw new ApiError(response.status, SERVER_OFFLINE)
   const body: unknown = await response.json().catch(() => null)
   if (!response.ok) throw new ApiError(response.status, errorMessage(body, response.status))
   return body as T
