@@ -313,9 +313,9 @@ def spread_by_price(scores: list[TopsisScore], prices: list[Decimal], pairs: lis
     price bands; each band shows its best-ranked build, so the variants run from cheap to
     near the budget. No two shown builds share a CPU chip + GPU chip pair (`pairs[i]`).
     When some bands are empty, the best-ranked remaining builds with new pairs fill in;
-    when no new pair is left (office has no GPU), builds with a new `setups[i]` (pair plus
-    RAM and storage size) do. `prices[i]`, `pairs[i]` and `setups[i]` belong to the build
-    at `scores[k].index == i`.
+    when no new pair is left, builds without a GPU (office) and with a new `setups[i]`
+    (pair plus RAM and storage size) do; a build with a GPU never repeats a pair.
+    `prices[i]`, `pairs[i]` and `setups[i]` belong to the build at `scores[k].index == i`.
     """
     if not scores:
         return []
@@ -342,7 +342,8 @@ def spread_by_price(scores: list[TopsisScore], prices: list[Decimal], pairs: lis
         for rank, score in ranked:
             if len(chosen) >= count:
                 break
-            if setups[score.index] not in shown:
+            # Only GPU-less builds: with a GPU, a new RAM or storage size is no new variant.
+            if pairs[score.index][1] is None and setups[score.index] not in shown:
                 shown.add(setups[score.index])
                 chosen.append((rank, score))
     return sorted(chosen, key=lambda item: prices[item[1].index])
