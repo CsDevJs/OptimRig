@@ -19,6 +19,16 @@ def test_liveness_does_not_connect_to_database(client):
     assert response.json() == {"status": "ok"}
 
 
+def test_routes_also_answer_under_the_api_prefix(client):
+    # On Vercel the backend service may receive the site's /api/... path unchanged.
+    assert client.get("/api/health").json() == {"status": "ok"}
+    assert client.get("/api/components?limit=0").status_code == 422
+    assert client.get("/apifoo/health").status_code == 404
+    docs = client.get("/api/docs").text
+    assert "/api/openapi.json" in docs
+    assert client.get("/api/openapi.json").status_code == 200
+
+
 @pytest.mark.parametrize("query", [
     "category=unknown", "tier=unknown", "limit=0", "limit=1001", "offset=-1",
     "brand=", "brand=%20%20", "limit=abc",

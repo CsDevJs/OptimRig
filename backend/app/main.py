@@ -18,6 +18,29 @@ app = FastAPI(
     description="Read the manually maintained component catalog, check PC build compatibility, "
                 "and save builds to a user account.",
 )
+
+
+class ApiPrefix:
+    """Serves every route both as /x and as /api/x.
+
+    The site calls /api/... . In development Vite strips the prefix before forwarding;
+    on Vercel the backend service may receive it. A request under /api is given
+    root_path "/api", so routing ignores the prefix and /api/docs loads /api/openapi.json.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "")
+        if scope["type"] in ("http", "websocket") and not scope.get("root_path") and (
+            path == "/api" or path.startswith("/api/")
+        ):
+            scope = {**scope, "root_path": "/api"}
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(ApiPrefix)
 app.include_router(catalog_router)
 app.include_router(compatibility_router)
 app.include_router(auth_router)
