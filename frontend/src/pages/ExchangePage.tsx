@@ -5,6 +5,7 @@ import { Flag } from '../components/Flag'
 import { useCurrency } from '../context/CurrencyContext'
 import { useToast } from '../context/ToastContext'
 import { CURRENCIES, CURRENCY_CODES, groupThousands, POPULAR, RATES_NOTE, REGIONS, type Region } from '../lib/currencies'
+import { hov } from '../lib/hover'
 
 type Preset = 'POPULAR' | 'CONVENIENT' | 'EXPENSIVE' | 'ALL'
 const PRESETS: { id: Preset; label: string; icon: ReactNode }[] = [
@@ -130,9 +131,9 @@ export function ExchangePage() {
           <div className="pt-2 border-t border-slate-800 space-y-2">
             <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold block">Filtre prestabilite</span>
             <div className="grid grid-cols-2 gap-2">
-              {PRESETS.map((p) => (
+              {PRESETS.map((p, i) => (
                 <button key={p.id} type="button" onClick={() => setPreset(p.id)}
-                  className={`liquid-filter-btn px-3 py-2 rounded-xl text-[11px] text-left flex items-center gap-2 ${preset === p.id ? 'active' : 'text-slate-200 font-medium'}`}>
+                  className={`liquid-filter-btn ${hov(i)} px-3 py-2 rounded-xl text-[11px] text-left flex items-center gap-2 ${preset === p.id ? 'active' : 'text-slate-200 font-medium'}`}>
                   {p.icon} {p.label}
                 </button>
               ))}
@@ -146,10 +147,10 @@ export function ExchangePage() {
             {groupThousands(amount)} {CURRENCIES[from].symbol} în {results.length} {results.length === 1 ? 'monedă' : 'monede'}
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[420px] overflow-y-auto p-1.5">
-            {results.map((c) => (
+            {results.map((c, i) => (
               <button key={c} type="button"
                 onClick={() => { setCode(c); toast({ title: 'Monedă schimbată', message: `Prețurile se afișează acum în ${c}.`, tone: 'ok' }) }}
-                className={`currency-card-compact p-2.5 rounded-xl text-left flex flex-col gap-1 ${c === active ? 'currency-card-active' : ''}`}>
+                className={`currency-card-compact ${hov(i)} p-2.5 rounded-xl text-left flex flex-col gap-1 ${c === active ? 'currency-card-active' : ''}`}>
                 <span className="flex items-center justify-between gap-1">
                   <span className="flex items-center gap-1.5"><Flag code={c} /><span className="font-mono font-bold text-xs text-violet-300">{c}</span></span>
                   <span className="text-[9px] text-slate-400 truncate max-w-[90px]">{CURRENCIES[c].label}</span>
