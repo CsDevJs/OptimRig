@@ -1,19 +1,36 @@
 # Starts the API on this computer and makes it reachable from the internet through
-# an ngrok tunnel on your fixed ngrok domain, so the Vercel site works while this
-# window is open. Ctrl+C (or closing the window) stops both.
+# an ngrok tunnel on your fixed ngrok domain, so the Vercel site can reach it.
 #
+# By hand (stops when you close the window or press Ctrl+C):
 #   powershell -ExecutionPolicy Bypass -File scripts\start-public.ps1
 #   (or double-click scripts\start-public.cmd)
+#
+# Always on: scripts\install-autostart.ps1 registers a Windows task that runs this
+# script with -Unattended when the computer starts.
 #
 # The domain comes from -Domain or from NGROK_DOMAIN in backend\.env.
 param(
     [string]$Domain,
-    [int]$Port = 8000
+    [int]$Port = 8000,
+    # ngrok's full path, for the startup task (it runs as SYSTEM, without your PATH).
+    [string]$Ngrok = 'ngrok',
+    # Your ngrok.yml (holds your authtoken), for the startup task.
+    [string]$NgrokConfig,
+    # No window: log to backend\logs\public\, wait for the database as long as it
+    # takes, and restart the API or the tunnel whenever either one stops.
+    [switch]$Unattended
 )
 $ErrorActionPreference = 'Stop'
 
 $backend = Split-Path $PSScriptRoot -Parent
 Set-Location $backend
+
+$logDir = Join-Path $backend 'logs\public'
+if ($Unattended) {
+    New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    Start-Transcript -Path (Join-Path $logDir 'start-public.log') -Append | Out-Null
+}
+function Log([string]$message) { Write-Host "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $message" }
 
 if (-not $Domain) {
     $line = Get-Content (Join-Path $backend '.env') -ErrorAction SilentlyContinue |
@@ -25,35 +42,98 @@ if (-not $Domain) {
 }
 $Domain = ($Domain -replace '^https?://', '').TrimEnd('/')
 
-if (-not (Get-Command ngrok -ErrorAction SilentlyContinue)) {
+$ngrokCommand = Get-Command $Ngrok -ErrorAction SilentlyContinue
+if (-not $ngrokCommand) {
     throw 'ngrok is not installed or not on PATH. Install it (winget install ngrok.ngrok) and run "ngrok config add-authtoken <token>" once.'
 }
+$ngrokExe = $ngrokCommand.Source
+
 $python = Join-Path $backend '.venv\Scripts\python.exe'
 if (-not (Test-Path $python)) { throw "No virtual environment at $python. See backend\README.md, Setup." }
 
-Write-Host "Starting the API on http://127.0.0.1:$Port ..."
-$api = Start-Process -FilePath $python -NoNewWindow -PassThru `
-    -ArgumentList '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', "$Port"
+function Start-Api {
+    $apiArgs = @('-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', "$Port")
+    if ($Unattended) {
+        Start-Process -FilePath $python -ArgumentList ($apiArgs + '--no-access-log') -PassThru -WindowStyle Hidden `
+            -RedirectStandardOutput (Join-Path $logDir 'api.out.log') `
+            -RedirectStandardError (Join-Path $logDir 'api.err.log')
+    } else {
+        Start-Process -FilePath $python -ArgumentList $apiArgs -NoNewWindow -PassThru
+    }
+}
 
-try {
-    # Wait until the API answers before opening the tunnel.
-    $deadline = (Get-Date).AddSeconds(60)
-    $up = $false
-    while (-not $up -and (Get-Date) -lt $deadline) {
-        if ($api.HasExited) { throw "The API stopped while starting (exit code $($api.ExitCode)). See the messages above." }
+# True once the API answers and reaches the database; false if it stopped or timed out.
+function Wait-Api($process, [int]$seconds) {
+    $deadline = (Get-Date).AddSeconds($seconds)
+    while ((Get-Date) -lt $deadline) {
+        if ($process.HasExited) { return $false }
         try {
             Invoke-RestMethod "http://127.0.0.1:$Port/health/db" -TimeoutSec 2 | Out-Null
-            $up = $true
+            return $true
         } catch {
-            Start-Sleep -Milliseconds 500
+            Start-Sleep -Seconds 1
         }
     }
-    if (-not $up) { throw 'The API or its database did not answer within 60 seconds. Is PostgreSQL running?' }
+    return $false
+}
 
-    Write-Host "API is up. Opening the tunnel: https://$Domain -> http://127.0.0.1:$Port"
-    Write-Host 'The site works while this window stays open. Press Ctrl+C to stop.'
-    & ngrok http "--url=$Domain" "$Port"
+function Stop-Proc($process) {
+    if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+}
+
+if (-not $Unattended) {
+    Log "Starting the API on http://127.0.0.1:$Port ..."
+    $api = Start-Api
+    try {
+        if (-not (Wait-Api $api 60)) {
+            throw 'The API or its database did not answer within 60 seconds. Is PostgreSQL running? See the messages above.'
+        }
+        Log "API is up. Opening the tunnel: https://$Domain -> http://127.0.0.1:$Port"
+        Log 'The site works while this window stays open. Press Ctrl+C to stop.'
+        $ngrokArgs = @('http', "--url=$Domain", "$Port")
+        if ($NgrokConfig) { $ngrokArgs += "--config=$NgrokConfig" }
+        & $ngrokExe @ngrokArgs
+    } finally {
+        Stop-Proc $api
+        Log 'Stopped the API and the tunnel.'
+    }
+    return
+}
+
+# Unattended: keep both running. Start-Process joins arguments with spaces, so a
+# config path with spaces (C:\Users\First Last\...) has to be quoted here.
+$tunnelArgs = @('http', "--url=$Domain", "$Port", '--log=stdout', '--log-level=warn')
+if ($NgrokConfig) { $tunnelArgs += "--config=`"$NgrokConfig`"" }
+
+$api = $null
+$tunnel = $null
+try {
+    while ($true) {
+        if (-not $api -or $api.HasExited) {
+            Stop-Proc $tunnel
+            $tunnel = $null
+            Log 'Starting the API'
+            $api = Start-Api
+            if (-not (Wait-Api $api 120)) {
+                Log 'The API or the database is not ready yet (see api.err.log). Retrying in 15 s.'
+                Stop-Proc $api
+                $api = $null
+                Start-Sleep -Seconds 15
+                continue
+            }
+            Log 'API is up'
+        }
+        if (-not $tunnel -or $tunnel.HasExited) {
+            if ($tunnel) { Log "The tunnel stopped (exit code $($tunnel.ExitCode), see ngrok.log). Restarting it." }
+            Log "Opening the tunnel https://$Domain -> http://127.0.0.1:$Port"
+            $tunnel = Start-Process -FilePath $ngrokExe -ArgumentList $tunnelArgs -PassThru -WindowStyle Hidden `
+                -RedirectStandardOutput (Join-Path $logDir 'ngrok.log') `
+                -RedirectStandardError (Join-Path $logDir 'ngrok.err.log')
+        }
+        Start-Sleep -Seconds 10
+    }
 } finally {
-    if (-not $api.HasExited) { Stop-Process -Id $api.Id -Force -ErrorAction SilentlyContinue }
-    Write-Host 'Stopped the API and the tunnel.'
+    Stop-Proc $tunnel
+    Stop-Proc $api
+    Log 'Stopped the API and the tunnel.'
 }
