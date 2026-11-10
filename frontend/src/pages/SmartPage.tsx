@@ -7,6 +7,7 @@ import type { Purpose, Recommendations, Selection } from '../api/types'
 import { useBuilder } from '../builder/BuilderContext'
 import { RankedBuildCard } from '../components/RankedBuildCard'
 import { useCurrency } from '../context/CurrencyContext'
+import { hov } from '../lib/hover'
 import { useToast } from '../context/ToastContext'
 
 type Brand = 'any' | 'AMD' | 'Intel'
@@ -19,10 +20,10 @@ const PURPOSES = [
 const PURPOSE_KEY = 'pc-configurator-purpose'
 const pct = (weight: number) => `${Math.round(weight * 100)}%`
 const PRESETS = [
-  { label: 'Buget', value: 30000, cls: 'bg-white/5 hover:bg-white/10 border-white/25 text-white' },
-  { label: 'Mediu', value: 55000, cls: 'bg-sky-400/10 hover:bg-sky-400/20 border-sky-400/30 text-sky-300' },
-  { label: 'High-End', value: 90000, cls: 'bg-violet-400/10 hover:bg-violet-400/20 border-violet-400/30 text-violet-300' },
-  { label: 'Ultra', value: 120000, cls: 'bg-pink-400/10 hover:bg-pink-400/20 border-pink-400/30 text-pink-300' },
+  { label: 'Buget', value: 30000, cls: 'tier-solid tier-solid-green' },
+  { label: 'Mediu', value: 55000, cls: 'tier-solid tier-solid-blue' },
+  { label: 'High-End', value: 90000, cls: 'tier-solid tier-solid-purple' },
+  { label: 'Ultra', value: 120000, cls: 'tier-solid tier-solid-gold' },
 ]
 
 export function SmartPage() {
@@ -94,7 +95,7 @@ export function SmartPage() {
                 <button key={p.label} type="button" onClick={() => setBudget(p.value)}
                   className={`p-2 rounded-xl border text-left transition hover:scale-105 ${p.cls}`}>
                   <div className="text-[11px] font-bold">{p.label}</div>
-                  <div className="text-[10px] text-slate-300 font-mono">{format(p.value)}</div>
+                  <div className="text-[10px] font-mono opacity-80">{format(p.value)}</div>
                 </button>
               ))}
             </div>
@@ -104,9 +105,9 @@ export function SmartPage() {
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-3">2. Brand CPU</span>
               <div className="grid grid-cols-3 gap-2">
-                {(['any', 'AMD', 'Intel'] as Brand[]).map((b) => (
+                {(['any', 'AMD', 'Intel'] as Brand[]).map((b, i) => (
                   <button key={b} type="button" onClick={() => setBrand(b)}
-                    className={`py-2.5 px-2 rounded-xl text-xs font-bold border transition hover:scale-105 ${brand === b ? 'border-violet-400/50 bg-violet-400/20 text-white' : 'border-slate-800 bg-slate-900 text-slate-300'}`}>
+                    className={`py-2.5 px-2 rounded-xl text-xs font-bold border ${hov(i)} hover:scale-105 ${brand === b ? 'border-violet-400/50 bg-violet-400/20 text-white' : 'border-slate-800 bg-slate-900 text-slate-300'}`}>
                     {b === 'any' ? 'Oricare' : b}
                   </button>
                 ))}
@@ -117,9 +118,9 @@ export function SmartPage() {
           <div className="md:col-span-2 space-y-4 modern-sleek-card rounded-2xl p-6">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">3. Scopul PC-ului</span>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2" role="radiogroup" aria-label="Scopul PC-ului">
-              {PURPOSES.map(({ id, label, icon: Icon }) => (
+              {PURPOSES.map(({ id, label, icon: Icon }, i) => (
                 <button key={id} type="button" role="radio" aria-checked={purpose === id} onClick={() => setPurpose(id)}
-                  className={`py-3 px-3 rounded-xl text-xs font-bold border transition hover:scale-105 flex items-center justify-center gap-2 text-center ${purpose === id ? 'border-violet-400/50 bg-violet-400/20 text-white' : 'border-slate-800 bg-slate-900 text-slate-300'}`}>
+                  className={`py-3 px-3 rounded-xl text-xs font-bold border ${hov(i)} hover:scale-105 flex items-center justify-center gap-2 text-center ${purpose === id ? 'border-violet-400/50 bg-violet-400/20 text-white' : 'border-slate-800 bg-slate-900 text-slate-300'}`}>
                   <Icon size={15} className="text-violet-300 shrink-0" /> {label}
                 </button>
               ))}
