@@ -242,3 +242,20 @@ def test_spread_by_price_fills_empty_bands_with_new_pairs():
     shown = spread_by_price(scores, prices, pairs, D(1000))
     assert len(shown) == 6 and len({pairs[s.index] for _, s in shown}) == 6
     assert spread_by_price([], [], [], D(1000)) == []
+
+
+def test_spread_by_price_never_repeats_a_pair_with_a_gpu():
+    from app.services.recommend import spread_by_price
+    from app.services.topsis import TopsisScore
+    # Two gaming pairs, each in builds that differ only in RAM or storage size: two shown.
+    prices = [D(p) for p in (100, 200, 300, 400)]
+    pairs = [("A", "X"), ("A", "X"), ("A", "Y"), ("A", "Y")]
+    setups = [pair + (size,) for pair, size in zip(pairs, (16, 32, 16, 32))]
+    scores = [TopsisScore(i, 0, 0, 1 - i / 10) for i in range(4)]
+    shown = spread_by_price(scores, prices, pairs, D(1000), setups=setups)
+    assert [s.index for _, s in shown] == [0, 2]
+    # Without a GPU (office), another RAM or storage size does count as a variant.
+    office = [("A", None)] * 4
+    setups = [pair + (size,) for pair, size in zip(office, (16, 32, 16, 64))]
+    shown = spread_by_price(scores, prices, office, D(1000), setups=setups)
+    assert [s.index for _, s in shown] == [0, 1, 3]
