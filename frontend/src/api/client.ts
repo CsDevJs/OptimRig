@@ -56,7 +56,7 @@ async function request<T>(path: string, init: { method?: string; body?: unknown 
   if (response.status === 204) return undefined as T
   const isJson = response.headers.get('content-type')?.includes('application/json') ?? false
   // FastAPI always answers in JSON. A non-JSON error comes from whatever sits in front
-  // of it (the Netlify proxy, the tunnel) and means the backend isn't running.
+  // of it (the Vercel proxy, the tunnel) and means the backend isn't running.
   if (!response.ok && !isJson) throw new ApiError(response.status, SERVER_OFFLINE)
   const body: unknown = await response.json().catch(() => null)
   if (!response.ok) throw new ApiError(response.status, errorMessage(body, response.status))

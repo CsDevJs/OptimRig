@@ -1,5 +1,5 @@
 # Starts the API on this computer and makes it reachable from the internet through
-# an ngrok tunnel on your fixed ngrok domain, so the Netlify site works while this
+# an ngrok tunnel on your fixed ngrok domain, so the Vercel site works while this
 # window is open. Ctrl+C (or closing the window) stops both.
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\start-public.ps1

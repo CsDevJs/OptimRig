@@ -76,23 +76,21 @@ src/
 the backend (a reverse proxy), or build with `VITE_API_BASE=https://api.example.com`
 and enable CORS for the site's origin in the backend.
 
-### Netlify
+### Vercel
 
-`netlify.toml` (repository root) builds this folder and publishes `dist/`. Netlify
-serves only the frontend; the backend runs on its own server (it needs PostgreSQL
-and keeps `data/users.vault` and `logs/` on disk).
+`vercel.json` (in this folder) builds the app and publishes `dist/`. Vercel serves
+only the frontend; the backend runs on its own server, for example your own
+computer (see "Running the public site from this computer" in `backend/README.md`).
 
-1. In Netlify, *Add new site → Import an existing project* and pick this
-   repository. The base directory, build command and publish folder come from
-   `netlify.toml`.
-2. In *Site configuration → Environment variables*, set `BACKEND_URL` to the
-   backend's public URL, e.g. `https://api.example.com`. The build fails without it.
-   To run the backend on your own computer, use its ngrok address; see
-   "Running the public site from this computer" in `backend/README.md`.
+1. In `vercel.json`, replace `YOUR-NGROK-DOMAIN.ngrok-free.app` in the `/api/:path*`
+   rewrite with your backend's address, e.g. `your-name.ngrok-free.app`, and commit.
+   The build fails while the placeholder is still there.
+2. In Vercel, *Add New → Project*, import this repository, and set **Root
+   Directory** to `frontend`. The build settings come from `vercel.json`.
 3. Deploy.
 
-`scripts/netlify-redirects.mjs` writes `dist/_redirects` at build time so that
-`/api/*` is proxied to `BACKEND_URL` (prefix stripped, as in development). The
-browser only talks to the Netlify origin, so the backend needs no CORS setup. Any
-other path that isn't a file serves `index.html`, so links like `/manual` and page
-reloads work. After changing `BACKEND_URL`, redeploy.
+The `/api/*` rewrite proxies requests to the backend with the prefix stripped, as
+in development, so the browser only talks to the Vercel site and the backend needs
+no CORS setup. Any other path that isn't a file serves `index.html`, so links like
+`/manual` and page reloads work. After changing the backend address, commit and
+Vercel redeploys.
