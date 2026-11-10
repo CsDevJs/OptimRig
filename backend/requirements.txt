@@ -1,3 +1,5 @@
+# The API (also what Vercel installs). The store crawler's extra packages are in
+# requirements-crawl.txt; requirements-dev.txt has everything plus the tests.
 SQLAlchemy==2.1.5
 alembic==1.20.0
 psycopg[binary]==3.3.6
@@ -8,6 +10,3 @@ argon2-cffi==25.1.0
 cryptography==50.0.2
 PyJWT==2.15.1
 email-validator==2.3.0
-httpx==0.28.1
-beautifulsoup4==4.15.0
-crawlee[beautifulsoup]==1.11.0

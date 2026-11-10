@@ -79,7 +79,7 @@ and enable CORS for the site's origin in the backend.
 ### GitHub Pages
 
 `.github/workflows/deploy-pages.yml` builds this folder and publishes it at
-`https://<owner>.github.io/<repository>/` on every push to `main`. GitHub Pages
+`https://<owner>.github.io/<repository>/` when you run it. GitHub Pages
 serves only the frontend; the backend runs elsewhere, e.g. on your computer through
 ngrok (see "Running the public site from this computer" in `backend/README.md`).
 
@@ -88,11 +88,12 @@ ngrok (see "Running the public site from this computer" in `backend/README.md`).
    the backend's address, e.g. `https://your-name.ngrok-free.app`. The build fails without it.
 3. In the backend's `.env`, allow the site to call it:
    `CORS_ORIGINS=https://<owner>.github.io`, then restart the backend.
-4. Push to `main`, or run the workflow by hand from the *Actions* tab.
+4. Run the workflow from the *Actions* tab (*Deploy site to GitHub Pages → Run workflow*).
 
 Pages can't proxy `/api`, so the built site calls `VITE_API_BASE` directly and the
 backend allows it through CORS. The build uses the repository name as its base path,
 and `404.html` is a copy of `index.html`, so links like `/manual` and page reloads work.
 
-The root `vercel.json` is a draft for deploying the frontend and the backend together
-on Vercel; it isn't finished (accounts are still stored in files there).
+The site is normally deployed on Vercel together with the backend (root `vercel.json`,
+see the root `README.md`); this workflow is an alternative and only runs when started
+by hand from the *Actions* tab.

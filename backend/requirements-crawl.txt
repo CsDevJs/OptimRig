@@ -1,0 +1,6 @@
+# The catalog scripts (scripts.import_catalog, scripts.check_offers, ...): the API plus
+# the store crawler. Not needed by the API itself, so Vercel doesn't install these.
+-r requirements.txt
+httpx==0.28.1
+beautifulsoup4==4.15.0
+crawlee[beautifulsoup]==1.11.0
