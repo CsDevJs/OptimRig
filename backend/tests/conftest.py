@@ -17,6 +17,8 @@ os.environ.setdefault("JWT_SECRET", "test-only-secret-at-least-32-bytes-long")
 os.environ.setdefault("VAULT_KEY", "dGVzdC1vbmx5LXZhdWx0LWtleS0zMi1ieXRlcy0hISE=")
 # The activity log goes to a temporary folder, never the real one.
 os.environ["AUDIT_LOG_DIR"] = tempfile.mkdtemp(prefix="pc-audit-")
+# One allowed cross-origin site, as on GitHub Pages (see test_api.py).
+os.environ.setdefault("CORS_ORIGINS", "https://site.example")
 
 from app.db.session import get_db
 from app.main import app

@@ -19,6 +19,30 @@ def test_liveness_does_not_connect_to_database(client):
     assert response.json() == {"status": "ok"}
 
 
+def test_routes_also_answer_under_the_api_prefix(client):
+    # On Vercel the backend service may receive the site's /api/... path unchanged.
+    assert client.get("/api/health").json() == {"status": "ok"}
+    assert client.get("/api/components?limit=0").status_code == 422
+    assert client.get("/apifoo/health").status_code == 404
+    docs = client.get("/api/docs").text
+    assert "/api/openapi.json" in docs
+    assert client.get("/api/openapi.json").status_code == 200
+
+
+def test_cors_allows_only_configured_sites(client):
+    # The GitHub Pages site calls the API from another domain (CORS_ORIGINS in conftest).
+    allowed = client.get("/health", headers={"Origin": "https://site.example"})
+    assert allowed.headers["access-control-allow-origin"] == "https://site.example"
+    preflight = client.options("/builds", headers={
+        "Origin": "https://site.example",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "authorization, content-type, ngrok-skip-browser-warning",
+    })
+    assert preflight.status_code == 200
+    other = client.get("/health", headers={"Origin": "https://evil.example"})
+    assert "access-control-allow-origin" not in other.headers
+
+
 @pytest.mark.parametrize("query", [
     "category=unknown", "tier=unknown", "limit=0", "limit=1001", "offset=-1",
     "brand=", "brand=%20%20", "limit=abc",

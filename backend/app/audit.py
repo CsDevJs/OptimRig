@@ -1,6 +1,7 @@
 """Activity log: one line per account action, with the user's email.
 
-Lines go to `activity.log` in AUDIT_LOG_DIR (default backend/logs). A
+Lines go to `activity.log` in AUDIT_LOG_DIR (default backend/logs), or to the
+server's log with AUDIT_LOG_TO=stderr (the default on Vercel, whose disk isn't kept). A
 RotatingFileHandler keeps the file small: when it reaches AUDIT_LOG_MAX_BYTES it
 is renamed to activity.log.1 (older ones shift to .2, .3, ...) and a new file is
 started; past AUDIT_LOG_BACKUP_COUNT the oldest is deleted.
@@ -25,11 +26,14 @@ def _logger() -> logging.Logger:
     with _setup_lock:
         if not logger.handlers:
             from app.config import settings
-            settings.audit_log_dir.mkdir(parents=True, exist_ok=True)
-            handler = RotatingFileHandler(
-                settings.audit_log_dir / "activity.log", maxBytes=settings.audit_log_max_bytes,
-                backupCount=settings.audit_log_backup_count, encoding="utf-8",
-            )
+            if settings.audit_log_to == "stderr":
+                handler: logging.Handler = logging.StreamHandler()  # Vercel keeps these in its logs
+            else:
+                settings.audit_log_dir.mkdir(parents=True, exist_ok=True)
+                handler = RotatingFileHandler(
+                    settings.audit_log_dir / "activity.log", maxBytes=settings.audit_log_max_bytes,
+                    backupCount=settings.audit_log_backup_count, encoding="utf-8",
+                )
             handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s", "%Y-%m-%d %H:%M:%S"))
             logger.addHandler(handler)
             logger.setLevel(logging.INFO)

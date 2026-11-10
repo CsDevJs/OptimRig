@@ -17,6 +17,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Numeric,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -320,6 +321,18 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     builds: Mapped[list["Build"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
+class UserVaultRow(Base):
+    """The encrypted users vault when VAULT_STORAGE=database (app/vault.py,
+    DatabaseVault): a single row, id 1, holding the same JSON as the vault file."""
+
+    __tablename__ = "user_vault"
+    __table_args__ = (CheckConstraint("id = 1", name="user_vault_single_row"),)
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    envelope: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Build(Base):

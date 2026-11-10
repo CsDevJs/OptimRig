@@ -1,10 +1,15 @@
+import os
 from pathlib import Path
+from typing import Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 _PLACEHOLDER_SECRETS = {"CHANGE_ME", "change_me", "changeme", "secret"}
+# Vercel sets VERCEL=1. Its disk is read-only and not kept between requests, so there
+# the users vault lives in the database and the activity log goes to Vercel's logs.
+ON_VERCEL = bool(os.environ.get("VERCEL"))
 
 
 class Settings(BaseSettings):
@@ -17,12 +22,33 @@ class Settings(BaseSettings):
     # Encrypts the users' vault (email, password hash). Keep it out of git and away
     # from the vault file: with both, anyone can read every account; losing it loses them.
     vault_key: str
+    # "file": vault_path. "database": the user_vault table (same encryption, same key).
+    vault_storage: Literal["file", "database"] = "database" if ON_VERCEL else "file"
     vault_path: Path = BACKEND_DIR / "data" / "users.vault"
     # Activity log (app/audit.py): logins, failed logins, saved builds, each with the email.
     # Any folder works, e.g. AUDIT_LOG_DIR=D:/pc-configurator-logs
     audit_log_dir: Path = BACKEND_DIR / "logs"
     audit_log_max_bytes: int = 5 * 1024 * 1024  # rotate at 5 MB
     audit_log_backup_count: int = 10  # keep activity.log.1 ... activity.log.10
+    # "file": activity.log in audit_log_dir. "stderr": the server's log (Vercel's logs).
+    audit_log_to: Literal["file", "stderr"] = "stderr" if ON_VERCEL else "file"
+    # Sites on another domain allowed to call the API from the browser, comma-separated,
+    # e.g. CORS_ORIGINS=https://csdevjs.github.io (scheme + host, no path). Empty: none.
+    cors_origins: str = ""
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip().rstrip("/") for o in self.cors_origins.split(",") if o.strip()]
+
+    @field_validator("database_url")
+    @classmethod
+    def psycopg_driver(cls, value: str) -> str:
+        # Hosted databases (Neon, Vercel's integrations) give postgres:// or postgresql://
+        # addresses; SQLAlchemy needs the driver named to use psycopg 3.
+        for prefix in ("postgres://", "postgresql://"):
+            if value.startswith(prefix):
+                return "postgresql+psycopg://" + value[len(prefix):]
+        return value
 
     @field_validator("vault_key")
     @classmethod

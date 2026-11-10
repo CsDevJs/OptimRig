@@ -35,7 +35,7 @@ Python 3.12 or newer is recommended. Run all commands below from `backend/`.
 
    ```bash
    python3 -m venv .venv
-   .venv/bin/python -m pip install -r requirements.txt
+   .venv/bin/python -m pip install -r requirements-crawl.txt
    .venv/bin/python -m alembic upgrade head
    .venv/bin/python -m scripts.seed
    ```
@@ -55,31 +55,43 @@ Python 3.12 or newer is recommended. Run all commands below from `backend/`.
 
 ## Running the public site from this computer
 
-The Vercel site (see `frontend/README.md`) can use the API running on your own
+This is the alternative to running everything on Vercel (root `README.md`): the
+GitHub Pages site (see `frontend/README.md`) can use the API running on your own
 computer. An [ngrok](https://ngrok.com) tunnel gives it a fixed public HTTPS
 address; PostgreSQL, the users vault and the logs stay on your computer, and only
-the API port is reachable from outside. The site works while the script below is
-running and shows "Serverul nu este pornit momentan" when it isn't.
+the API port is reachable from outside. When the API isn't running, the site shows
+"Serverul nu este pornit momentan".
 
-One-time setup:
+One-time ngrok setup:
 
 1. Create a free ngrok account, install ngrok (`winget install ngrok.ngrok`) and
    run `ngrok config add-authtoken <your token>` (the token is on the ngrok dashboard).
 2. On the ngrok dashboard, under *Domains*, claim your free static domain, for
    example `your-name.ngrok-free.app`.
 3. Add it to `.env`: `NGROK_DOMAIN=your-name.ngrok-free.app`.
-4. In `frontend/vercel.json`, put `your-name.ngrok-free.app` in the `/api/:path*`
-   rewrite and commit. This is needed only once, because the domain doesn't change.
+4. On GitHub, set the repository variable `VITE_API_BASE` to
+   `https://your-name.ngrok-free.app`, and add `CORS_ORIGINS=https://<owner>.github.io`
+   to `.env` (see "GitHub Pages" in `frontend/README.md`). This is needed only once,
+   because the domain doesn't change.
 
-Then, whenever you want the site to work, double-click `scripts\start-public.cmd`
-(or run `powershell -ExecutionPolicy Bypass -File scripts\start-public.ps1`). It
-starts the API, waits until it can reach the database, and opens the tunnel.
-Ctrl+C or closing the window stops both. Your computer has to stay on and awake
-while it runs.
+Then choose how it runs:
 
-To start it automatically when you log in to Windows, press Win+R, open
-`shell:startup`, and put a shortcut to `scripts\start-public.cmd` there.
-PostgreSQL normally runs as a Windows service, so it is already up by then.
+- **Always on.** In PowerShell opened as administrator, from `backend\`:
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1
+  ```
+
+  This registers the Windows task *PC Configurator backend*. It starts the API and
+  the tunnel when the computer starts, before anyone logs in, with no window, and
+  restarts either one if it stops (also when PostgreSQL is still starting). The
+  script checks that your ngrok address answers before it finishes. Logs:
+  `logs\public\`. Keep the computer on and set *Settings > System > Power > Sleep*
+  to *Never*. To stop it starting with Windows, run the same command with
+  `-Uninstall`. Run it again after moving the project folder.
+- **Only when you want.** Double-click `scripts\start-public.cmd`. It runs while its
+  window is open; Ctrl+C or closing it stops both. Don't use it while the
+  always-on task is installed: both would use port 8000.
 
 ## API
 
@@ -147,6 +159,12 @@ decrypted; passwords are Argon2id hashes (`app/security.py`, salted, slow and
 memory-hard), so not even the key turns them back into passwords. Login checks the
 hash. Keep the key apart from the file and its backups.
 
+With `VAULT_STORAGE=database` (the default on Vercel, whose disk isn't kept) the same
+encrypted vault is the one row of the `user_vault` table (migration `0006`) instead of
+the file; `VAULT_KEY` still stays out of the database. Writers there share a
+PostgreSQL advisory lock, so several server instances can't overwrite each other's
+accounts.
+
 **Activity log** (`app/audit.py`): every account action is one line in
 `activity.log` inside `AUDIT_LOG_DIR` (default `backend/logs/`, git-ignored; set it in
 `.env` to any folder, e.g. `AUDIT_LOG_DIR=D:/pc-configurator-logs`). A
@@ -161,14 +179,19 @@ password, or no account with this email), `BUILD_SAVED`, `BUILD_SAVE_FAILED`,
 2026-11-04 15:27:31 | BUILD_SAVED | email=ana@exemplu.com | build_id=2 | name=Gaming | parts=8
 ```
 
+With `AUDIT_LOG_TO=stderr` (the default on Vercel) the same lines go to the server's
+log instead (Vercel: the project's *Logs* tab).
+
 Passwords and tokens are never written. The file holds emails in plain text, so keep
 the folder private. Run the server with one worker process: `RotatingFileHandler`
 isn't safe when several processes write the same file.
 
-Decrypt and list the accounts (id, email):
+Decrypt and list the accounts (id, email), and copy the vault file into the
+database that `DATABASE_URL` points to (when moving to Vercel, see the root `README.md`):
 
 ```bash
 .venv/bin/python -m scripts.vault show
+.venv/bin/python -m scripts.vault copy-to-database
 ```
 
 Migration `0005` moves to this layout; it refuses to run while accounts with the old
