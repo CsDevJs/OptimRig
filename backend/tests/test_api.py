@@ -29,6 +29,20 @@ def test_routes_also_answer_under_the_api_prefix(client):
     assert client.get("/api/openapi.json").status_code == 200
 
 
+def test_cors_allows_only_configured_sites(client):
+    # The GitHub Pages site calls the API from another domain (CORS_ORIGINS in conftest).
+    allowed = client.get("/health", headers={"Origin": "https://site.example"})
+    assert allowed.headers["access-control-allow-origin"] == "https://site.example"
+    preflight = client.options("/builds", headers={
+        "Origin": "https://site.example",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "authorization, content-type, ngrok-skip-browser-warning",
+    })
+    assert preflight.status_code == 200
+    other = client.get("/health", headers={"Origin": "https://evil.example"})
+    assert "access-control-allow-origin" not in other.headers
+
+
 @pytest.mark.parametrize("query", [
     "category=unknown", "tier=unknown", "limit=0", "limit=1001", "offset=-1",
     "brand=", "brand=%20%20", "limit=abc",

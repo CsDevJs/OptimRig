@@ -3,8 +3,9 @@ import type {
   Purpose, PurchasePlan, Recommendations, Selection, Store, Token, User,
 } from './types'
 
-// In development Vite forwards /api to FastAPI (see vite.config.ts).
-const BASE = import.meta.env.VITE_API_BASE ?? '/api'
+// In development Vite forwards /api to FastAPI (see vite.config.ts). The GitHub Pages
+// build sets VITE_API_BASE to the backend's public address (e.g. the ngrok domain).
+const BASE = (import.meta.env.VITE_API_BASE ?? '/api').replace(/\/+$/, '')
 
 export class ApiError extends Error {
   readonly status: number
@@ -56,7 +57,7 @@ async function request<T>(path: string, init: { method?: string; body?: unknown 
   if (response.status === 204) return undefined as T
   const isJson = response.headers.get('content-type')?.includes('application/json') ?? false
   // FastAPI always answers in JSON. A non-JSON error comes from whatever sits in front
-  // of it (the Vercel proxy, the tunnel) and means the backend isn't running.
+  // of it (a proxy, the tunnel) and means the backend isn't running.
   if (!response.ok && !isJson) throw new ApiError(response.status, SERVER_OFFLINE)
   const body: unknown = await response.json().catch(() => null)
   if (!response.ok) throw new ApiError(response.status, errorMessage(body, response.status))

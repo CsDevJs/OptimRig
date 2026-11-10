@@ -87,7 +87,7 @@ while (-not $ok -and (Get-Date) -lt $deadline) {
 }
 $logs = Join-Path $backend 'logs\public'
 if ($ok) {
-    Write-Host "Done. https://$domain answers, so the Vercel site works whenever this computer is on."
+    Write-Host "Done. https://$domain answers, so the website works whenever this computer is on."
 } else {
     Write-Host "https://$domain doesn't answer yet. Look in $logs (start-public.log, api.err.log, ngrok.log)."
     exit 1

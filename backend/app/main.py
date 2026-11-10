@@ -1,4 +1,5 @@
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ from app.api.catalog import router as catalog_router
 from app.api.compatibility import router as compatibility_router
 from app.api.purchase import router as purchase_router
 from app.api.recommend import router as recommend_router
+from app.config import settings
 from app.db.session import get_db
 from app.schemas import HealthRead
 
@@ -41,6 +43,14 @@ class ApiPrefix:
 
 
 app.add_middleware(ApiPrefix)
+# Lets a site on another domain (GitHub Pages, see CORS_ORIGINS) call the API. Logins
+# use a bearer token, not cookies, so credentials stay off.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "ngrok-skip-browser-warning"],
+)
 app.include_router(catalog_router)
 app.include_router(compatibility_router)
 app.include_router(auth_router)

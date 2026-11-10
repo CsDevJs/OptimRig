@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     audit_log_dir: Path = BACKEND_DIR / "logs"
     audit_log_max_bytes: int = 5 * 1024 * 1024  # rotate at 5 MB
     audit_log_backup_count: int = 10  # keep activity.log.1 ... activity.log.10
+    # Sites on another domain allowed to call the API from the browser, comma-separated,
+    # e.g. CORS_ORIGINS=https://csdevjs.github.io (scheme + host, no path). Empty: none.
+    cors_origins: str = ""
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip().rstrip("/") for o in self.cors_origins.split(",") if o.strip()]
 
     @field_validator("vault_key")
     @classmethod

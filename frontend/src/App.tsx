@@ -30,7 +30,7 @@ export default function App() {
       <CurrencyProvider>
         <ToastProvider>
           <BuilderProvider>
-            <BrowserRouter>
+            <BrowserRouter basename={import.meta.env.BASE_URL}>
               <ScrollToTop />
               <GlowTracker />
               <Header />

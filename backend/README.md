@@ -55,7 +55,7 @@ Python 3.12 or newer is recommended. Run all commands below from `backend/`.
 
 ## Running the public site from this computer
 
-The Vercel site (see `frontend/README.md`) can use the API running on your own
+The GitHub Pages site (see `frontend/README.md`) can use the API running on your own
 computer. An [ngrok](https://ngrok.com) tunnel gives it a fixed public HTTPS
 address; PostgreSQL, the users vault and the logs stay on your computer, and only
 the API port is reachable from outside. When the API isn't running, the site shows
@@ -68,8 +68,10 @@ One-time ngrok setup:
 2. On the ngrok dashboard, under *Domains*, claim your free static domain, for
    example `your-name.ngrok-free.app`.
 3. Add it to `.env`: `NGROK_DOMAIN=your-name.ngrok-free.app`.
-4. In `frontend/vercel.json`, put `your-name.ngrok-free.app` in the `/api/:path*`
-   rewrite and commit. This is needed only once, because the domain doesn't change.
+4. On GitHub, set the repository variable `VITE_API_BASE` to
+   `https://your-name.ngrok-free.app`, and add `CORS_ORIGINS=https://<owner>.github.io`
+   to `.env` (see "GitHub Pages" in `frontend/README.md`). This is needed only once,
+   because the domain doesn't change.
 
 Then choose how it runs:
 

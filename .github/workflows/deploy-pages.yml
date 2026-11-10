@@ -1,0 +1,69 @@
+# Builds the frontend and publishes it on GitHub Pages on every push to main
+# (or by hand: Actions > Deploy site to GitHub Pages > Run workflow).
+# The backend runs elsewhere (e.g. your computer through ngrok): set its public
+# address as the repository variable VITE_API_BASE, see frontend/README.md.
+name: Deploy site to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the backend address
+        run: |
+          if [[ ! "$VITE_API_BASE" =~ ^https://[^/[:space:]]+ ]]; then
+            echo "::error::Set the repository variable VITE_API_BASE (Settings > Secrets and variables > Actions > Variables) to your backend's address, e.g. https://your-name.ngrok-free.app"
+            exit 1
+          fi
+          echo "Backend: $VITE_API_BASE"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      # The site lives at https://<owner>.github.io/<repository>/, so build for that path.
+      - name: Build
+        run: npm run build -- --base=/${{ github.event.repository.name }}/
+
+      # GitHub Pages has no "serve index.html for every page" setting; its 404 page is
+      # the app itself, so links like /manual and page reloads still open the right page.
+      - name: Serve the app for every page
+        run: cp dist/index.html dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -76,21 +76,23 @@ src/
 the backend (a reverse proxy), or build with `VITE_API_BASE=https://api.example.com`
 and enable CORS for the site's origin in the backend.
 
-### Vercel
+### GitHub Pages
 
-`vercel.json` (in this folder) builds the app and publishes `dist/`. Vercel serves
-only the frontend; the backend runs on its own server, for example your own
-computer (see "Running the public site from this computer" in `backend/README.md`).
+`.github/workflows/deploy-pages.yml` builds this folder and publishes it at
+`https://<owner>.github.io/<repository>/` on every push to `main`. GitHub Pages
+serves only the frontend; the backend runs elsewhere, e.g. on your computer through
+ngrok (see "Running the public site from this computer" in `backend/README.md`).
 
-1. In `vercel.json`, replace `YOUR-NGROK-DOMAIN.ngrok-free.app` in the `/api/:path*`
-   rewrite with your backend's address, e.g. `your-name.ngrok-free.app`, and commit.
-   The build fails while the placeholder is still there.
-2. In Vercel, *Add New → Project*, import this repository, and set **Root
-   Directory** to `frontend`. The build settings come from `vercel.json`.
-3. Deploy.
+1. Repository *Settings → Pages*: set *Source* to **GitHub Actions**.
+2. *Settings → Secrets and variables → Actions → Variables*: add `VITE_API_BASE` with
+   the backend's address, e.g. `https://your-name.ngrok-free.app`. The build fails without it.
+3. In the backend's `.env`, allow the site to call it:
+   `CORS_ORIGINS=https://<owner>.github.io`, then restart the backend.
+4. Push to `main`, or run the workflow by hand from the *Actions* tab.
 
-The `/api/*` rewrite proxies requests to the backend with the prefix stripped, as
-in development, so the browser only talks to the Vercel site and the backend needs
-no CORS setup. Any other path that isn't a file serves `index.html`, so links like
-`/manual` and page reloads work. After changing the backend address, commit and
-Vercel redeploys.
+Pages can't proxy `/api`, so the built site calls `VITE_API_BASE` directly and the
+backend allows it through CORS. The build uses the repository name as its base path,
+and `404.html` is a copy of `index.html`, so links like `/manual` and page reloads work.
+
+The root `vercel.json` is a draft for deploying the frontend and the backend together
+on Vercel; it isn't finished (accounts are still stored in files there).

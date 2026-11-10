@@ -1,5 +1,5 @@
 # Starts the API on this computer and makes it reachable from the internet through
-# an ngrok tunnel on your fixed ngrok domain, so the Vercel site can reach it.
+# an ngrok tunnel on your fixed ngrok domain, so the website can reach it.
 #
 # By hand (stops when you close the window or press Ctrl+C):
 #   powershell -ExecutionPolicy Bypass -File scripts\start-public.ps1
