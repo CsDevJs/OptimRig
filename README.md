@@ -1,1 +1,1 @@
-# PC-Configurator
+# OptimRig
