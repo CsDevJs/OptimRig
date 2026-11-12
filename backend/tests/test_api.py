@@ -76,7 +76,7 @@ def test_openapi_documents_all_spec_shapes(client):
         "/health", "/health/db", "/components", "/components/{component_id}", "/stores",
         "/compatibility/check", "/compatibility/filter",
         "/auth/register", "/auth/login", "/auth/me", "/builds", "/builds/{build_id}", "/purchase/plan",
-        "/recommendations",
+        "/recommendations", "/admin/emails",
     }
     assert "CpuSpecRead" in schema["components"]["schemas"]
     assert "CoolerSpecRead" in schema["components"]["schemas"]

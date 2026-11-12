@@ -35,10 +35,16 @@ class Settings(BaseSettings):
     # Sites on another domain allowed to call the API from the browser, comma-separated,
     # e.g. CORS_ORIGINS=https://csdevjs.github.io (scheme + host, no path). Empty: none.
     cors_origins: str = ""
+    # Accounts that may open the admin page (/admin), comma-separated emails. Empty: nobody.
+    admin_emails: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip().rstrip("/") for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def admin_email_list(self) -> set[str]:
+        return {e.strip().lower() for e in self.admin_emails.split(",") if e.strip()}
 
     @field_validator("database_url")
     @classmethod

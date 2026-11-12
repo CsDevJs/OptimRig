@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.auth import router as auth_router
 from app.api.builds import router as builds_router
+from app.api.admin import router as admin_router
 from app.api.catalog import router as catalog_router
 from app.api.compatibility import router as compatibility_router
 from app.api.purchase import router as purchase_router
@@ -57,6 +58,7 @@ app.include_router(auth_router)
 app.include_router(builds_router)
 app.include_router(purchase_router)
 app.include_router(recommend_router)
+app.include_router(admin_router)
 
 
 @app.get("/health", response_model=HealthRead, tags=["Health"])
