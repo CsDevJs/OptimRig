@@ -227,11 +227,16 @@
 }
 .hov:hover svg { color: var(--hc, #7797ff); }
 
-/* ---- Budget presets: solid tier colours, navy text ---- */
-.tier-solid { color: #0a1026; border-color: transparent; transition: filter 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease; }
-.tier-solid:hover { filter: brightness(1.1); box-shadow: 0 8px 20px -8px var(--tier); }
-/* Muted tones, close to the navy palette's steel greys. */
-.tier-solid-green { --tier: #7fa996; background: #7fa996; }
-.tier-solid-blue { --tier: #8b9dd0; background: #8b9dd0; }
-.tier-solid-purple { --tier: #a196c6; background: #a196c6; }
-.tier-solid-gold { --tier: #c2ad7f; background: #c2ad7f; }
+/* ---- Budget presets: slate at rest like the brand buttons; on hover and when selected
+   (aria-pressed) the same colours and tint as the .hov-* hovers above. Unlayered, so it wins
+   over Tailwind's utilities. */
+.tier-btn { transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, transform 0.25s ease; }
+.tier-btn:hover, .tier-btn[aria-pressed="true"] {
+  border-color: var(--tier);
+  background-color: color-mix(in srgb, var(--tier) 20%, #182345);
+  color: #fff;
+}
+.tier-green { --tier: #34c37f; }
+.tier-blue { --tier: #7797ff; }
+.tier-purple { --tier: #a78bfa; }
+.tier-gold { --tier: #e2b74a; }
