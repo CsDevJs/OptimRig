@@ -20,10 +20,10 @@ const PURPOSES = [
 const PURPOSE_KEY = 'pc-configurator-purpose'
 const pct = (weight: number) => `${Math.round(weight * 100)}%`
 const PRESETS = [
-  { label: 'Buget', value: 30000, cls: 'tier-solid tier-solid-green' },
-  { label: 'Mediu', value: 55000, cls: 'tier-solid tier-solid-blue' },
-  { label: 'High-End', value: 90000, cls: 'tier-solid tier-solid-purple' },
-  { label: 'Ultra', value: 120000, cls: 'tier-solid tier-solid-gold' },
+  { label: 'Buget', value: 30000, cls: 'tier-green' },
+  { label: 'Mediu', value: 55000, cls: 'tier-blue' },
+  { label: 'High-End', value: 90000, cls: 'tier-purple' },
+  { label: 'Ultra', value: 120000, cls: 'tier-gold' },
 ]
 
 export function SmartPage() {
@@ -92,8 +92,8 @@ export function SmartPage() {
               onChange={(e) => setBudget(Number(e.target.value))} className="w-full h-2" />
             <div className="grid grid-cols-4 gap-2 pt-2">
               {PRESETS.map((p) => (
-                <button key={p.label} type="button" onClick={() => setBudget(p.value)}
-                  className={`p-2 rounded-xl border text-left transition hover:scale-105 ${p.cls}`}>
+                <button key={p.label} type="button" onClick={() => setBudget(p.value)} aria-pressed={budget === p.value}
+                  className={`tier-btn p-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-300 text-left hover:scale-105 ${p.cls}`}>
                   <div className="text-[11px] font-bold">{p.label}</div>
                   <div className="text-[10px] font-mono opacity-80">{format(p.value)}</div>
                 </button>
