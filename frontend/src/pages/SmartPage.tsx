@@ -84,8 +84,8 @@ export function SmartPage() {
         </div>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-800/80">
-          {/* Both cards: the same header row (label left, current choice right), controls at the
-              bottom, so the price boxes and the brand buttons sit on one line. */}
+          {/* Both cards: the step name on top, controls at the bottom, so the price boxes and
+              the brand buttons sit on one line. */}
           <div className="modern-sleek-card rounded-2xl p-6 flex flex-col gap-5">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400">1. Buget</span>
@@ -97,10 +97,7 @@ export function SmartPage() {
           </div>
 
           <div className="modern-sleek-card rounded-2xl p-6 flex flex-col gap-5">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">2. Brand CPU</span>
-              <span className="text-base sm:text-lg font-extrabold text-violet-300">{BRANDS.find((b) => b.id === brand)?.label}</span>
-            </div>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">2. Brand CPU</span>
             <div className="mt-auto grid grid-cols-3 gap-2" role="radiogroup" aria-label="Brand CPU">
               {BRANDS.map(({ id, label }, i) => (
                 <button key={id} type="button" role="radio" aria-checked={brand === id} onClick={() => setBrand(id)}
