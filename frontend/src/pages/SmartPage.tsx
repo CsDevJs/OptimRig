@@ -22,7 +22,7 @@ const PURPOSE_KEY = 'pc-configurator-purpose'
 const pct = (weight: number) => `${Math.round(weight * 100)}%`
 // A preset sets the range to its value ± 2000 lei.
 const PRESET_SPREAD = 2000
-const SLIDER = { min: 20000, max: 130000, step: 1000 }
+const SLIDER = { min: 0, max: 130000, step: 1000 }
 const PRESETS = [
   { label: 'Buget', value: 30000, cls: 'tier-green' },
   { label: 'Mediu', value: 55000, cls: 'tier-blue' },
@@ -35,7 +35,7 @@ export function SmartPage() {
   const { code, format } = useCurrency()
   const toast = useToast()
   const navigate = useNavigate()
-  const [[low, high], setRange] = useState<[number, number]>([55000 - PRESET_SPREAD, 55000 + PRESET_SPREAD])
+  const [[low, high], setRange] = useState<[number, number]>([SLIDER.min, SLIDER.max]) // opens on the whole range
   const [brand, setBrand] = useState<Brand>('any')
   const [purpose, setPurposeState] = useState<Purpose>(() => {
     try {
