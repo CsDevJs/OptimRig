@@ -85,8 +85,9 @@ export const api = {
     request<FilterResult>('/compatibility/filter', { method: 'POST', body: selectionBody(selection) }),
   plan: (selection: Selection) =>
     request<PurchasePlan>('/purchase/plan', { method: 'POST', body: selectionBody(selection) }),
-  recommend: (budget_mdl: number, purpose: Purpose, cpu_brand: 'AMD' | 'Intel' | null) =>
-    request<Recommendations>('/recommendations', { method: 'POST', body: { budget_mdl, purpose, cpu_brand } }),
+  /** Builds priced between min_mdl and max_mdl. */
+  recommend: (min_mdl: number, max_mdl: number, purpose: Purpose, cpu_brand: 'AMD' | 'Intel' | null) =>
+    request<Recommendations>('/recommendations', { method: 'POST', body: { min_mdl, max_mdl, purpose, cpu_brand } }),
 
   register: (email: string, password: string) =>
     request<User>('/auth/register', { method: 'POST', body: { email, password } }),

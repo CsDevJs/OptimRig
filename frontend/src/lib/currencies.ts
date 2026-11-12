@@ -81,3 +81,7 @@ export function groupThousands(n: number): string {
 export function convertFromMdl(mdl: number, code: string): number {
   return mdl / (CURRENCIES[code]?.mdl ?? 1)
 }
+
+export function convertToMdl(amount: number, code: string): number {
+  return amount * (CURRENCIES[code]?.mdl ?? 1)
+}

@@ -306,32 +306,35 @@ def _strict_fit(a: Slot, x: Candidate | None, b: Slot, y: Candidate | None) -> b
 # ---------- Which ranked builds to show ----------
 
 SHOWN_BUILDS = 6
-# Shown builds cost the budget give or take this much (MDL).
-BUDGET_TOLERANCE = Decimal(2000)
 
 
-def budget_window(budget: Decimal) -> tuple[Decimal, Decimal]:
-    """Lowest and highest total price of a shown build."""
-    return max(Decimal(0), budget - BUDGET_TOLERANCE), budget + BUDGET_TOLERANCE
+def spread_in_range(scores: list[TopsisScore], prices: list[Decimal], pairs: list[tuple], low: Decimal,
+                    high: Decimal, count: int = SHOWN_BUILDS,
+                    setups: list[tuple] | None = None) -> list[tuple[int, TopsisScore]]:
+    """Builds to show, as (rank, score), cheapest first.
 
-
-def pick_near_budget(scores: list[TopsisScore], prices: list[Decimal], pairs: list[tuple], budget: Decimal,
-                     count: int = SHOWN_BUILDS, setups: list[tuple] | None = None) -> list[tuple[int, TopsisScore]]:
-    """Builds to show, as (rank, score): first the build whose price is closest to the
-    budget, then the best-ranked builds, at most `count` in all.
-
-    No two shown builds share a CPU chip + GPU chip pair (`pairs[i]`). When no new pair
+    The price range low-high is split into `count` equal bands; each band shows its
+    best-ranked build, so the variants run from the low end to the high end of the range.
+    No two shown builds share a CPU chip + GPU chip pair (`pairs[i]`). When some bands
+    are empty, the best-ranked remaining builds with new pairs fill in; when no new pair
     is left, builds without a GPU (office) with a new `setups[i]` (pair plus RAM and
-    storage size) fill in; a build with a GPU never repeats a pair. Fewer than `count`
-    are returned when there are not enough different builds.
+    storage size) do; a build with a GPU never repeats a pair. Fewer than `count` are
+    returned when there are not enough different builds.
     `prices[i]`, `pairs[i]` and `setups[i]` belong to the build at `scores[k].index == i`.
     """
     if not scores:
         return []
+    width = (high - low) / count
+    band_of = lambda price: count - 1 if width <= 0 else max(0, min(count - 1, int((price - low) / width)))
     ranked = list(enumerate(scores, start=1))
-    first = min(ranked, key=lambda item: (abs(prices[item[1].index] - budget), item[0]))
-    chosen = [first]
-    used = {pairs[first[1].index]}
+    chosen: list[tuple[int, TopsisScore]] = []
+    bands, used = set(), set()
+    for rank, score in ranked:  # best first: the first build seen in a band is its best
+        band, pair = band_of(prices[score.index]), pairs[score.index]
+        if band not in bands and pair not in used:
+            bands.add(band)
+            used.add(pair)
+            chosen.append((rank, score))
     for rank, score in ranked:
         if len(chosen) >= count:
             break
@@ -347,4 +350,4 @@ def pick_near_budget(scores: list[TopsisScore], prices: list[Decimal], pairs: li
             if pairs[score.index][1] is None and setups[score.index] not in shown:
                 shown.add(setups[score.index])
                 chosen.append((rank, score))
-    return chosen
+    return sorted(chosen, key=lambda item: prices[item[1].index])

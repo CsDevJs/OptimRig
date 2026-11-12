@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { Purpose, Recommendations, Selection } from '../api/types'
 import { useBuilder } from '../builder/BuilderContext'
+import { PriceRange } from '../components/PriceRange'
 import { RankedBuildCard } from '../components/RankedBuildCard'
 import { useCurrency } from '../context/CurrencyContext'
 import { hov } from '../lib/hover'
@@ -19,6 +20,9 @@ const PURPOSES = [
 ] as const
 const PURPOSE_KEY = 'pc-configurator-purpose'
 const pct = (weight: number) => `${Math.round(weight * 100)}%`
+// A preset sets the range to its value ± 2000 lei.
+const PRESET_SPREAD = 2000
+const SLIDER = { min: 20000, max: 130000, step: 1000 }
 const PRESETS = [
   { label: 'Buget', value: 30000, cls: 'tier-green' },
   { label: 'Mediu', value: 55000, cls: 'tier-blue' },
@@ -31,7 +35,7 @@ export function SmartPage() {
   const { code, format } = useCurrency()
   const toast = useToast()
   const navigate = useNavigate()
-  const [budget, setBudget] = useState(55000)
+  const [[low, high], setRange] = useState<[number, number]>([55000 - PRESET_SPREAD, 55000 + PRESET_SPREAD])
   const [brand, setBrand] = useState<Brand>('any')
   const [purpose, setPurposeState] = useState<Purpose>(() => {
     try {
@@ -50,8 +54,8 @@ export function SmartPage() {
     }
   }
 
-  // TOPSIS ranking of every compatible build costing the budget ± 2000 lei. Waits until the slider stops.
-  const query = `${budget}|${purpose}|${brand}`
+  // TOPSIS ranking of every compatible build priced in the range. Waits until the slider stops.
+  const query = `${low}|${high}|${purpose}|${brand}`
   const [answer, setAnswer] = useState<{ query: string; result?: Recommendations; error?: string } | null>(null)
   const loading = answer?.query !== query
   const result = answer?.result ?? null
@@ -59,7 +63,7 @@ export function SmartPage() {
   useEffect(() => {
     let active = true
     const timer = setTimeout(() => {
-      api.recommend(budget, purpose, brand === 'any' ? null : brand)
+      api.recommend(low, high, purpose, brand === 'any' ? null : brand)
         .then((r) => active && setAnswer({ query, result: r }))
         .catch((e: Error) => active && setAnswer({ query, error: e.message }))
     }, 400)
@@ -67,7 +71,7 @@ export function SmartPage() {
       active = false
       clearTimeout(timer)
     }
-  }, [query, budget, purpose, brand])
+  }, [query, low, high, purpose, brand])
 
   return (
     <section className="space-y-8">
@@ -85,14 +89,14 @@ export function SmartPage() {
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-800/80">
           <div className="space-y-4 modern-sleek-card rounded-2xl p-6">
             <div className="flex items-center justify-between">
-              <label htmlFor="budget" className="text-xs font-bold uppercase tracking-wider text-slate-400">1. Buget țintă</label>
-              <span className="text-xl font-extrabold font-mono text-violet-300">{format(budget)}</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">1. Buget țintă</span>
+              <span className="text-base sm:text-lg font-extrabold font-mono text-violet-300 text-right">{format(low)} – {format(high)}</span>
             </div>
-            <input id="budget" type="range" min={20000} max={130000} step={1000} value={budget}
-              onChange={(e) => setBudget(Number(e.target.value))} className="w-full h-2" />
+            <PriceRange {...SLIDER} low={low} high={high} onChange={(a, b) => setRange([a, b])} />
             <div className="grid grid-cols-4 gap-2 pt-2">
               {PRESETS.map((p) => (
-                <button key={p.label} type="button" onClick={() => setBudget(p.value)} aria-pressed={budget === p.value}
+                <button key={p.label} type="button" onClick={() => setRange([p.value - PRESET_SPREAD, p.value + PRESET_SPREAD])}
+                  aria-pressed={low === p.value - PRESET_SPREAD && high === p.value + PRESET_SPREAD}
                   className={`tier-btn p-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-300 text-left hover:scale-105 ${p.cls}`}>
                   <div className="text-[11px] font-bold">{p.label}</div>
                   <div className="text-[10px] font-mono opacity-80">{format(p.value)}</div>
@@ -152,7 +156,7 @@ export function SmartPage() {
           </p>
         )}
         {!loading && result && !result.builds.length && (
-          <p className="text-sm text-amber-300">Nicio configurație compatibilă care respectă cerințele acestui scop nu costă bugetul ± {format(2000)}. Alege alt buget.</p>
+          <p className="text-sm text-amber-300">Nicio configurație compatibilă care respectă cerințele acestui scop nu are prețul în intervalul ales. Alege alt interval.</p>
         )}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {result?.builds.map((build) => (

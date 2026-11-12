@@ -152,9 +152,9 @@ export interface RankedBuild {
 export interface Recommendations {
   weights: { price: number; performance: number; power: number }
   performance_mix: { cpu: number; gpu: number }
-  /** True: the purpose's own rules found nothing near the budget, so these are entry-level builds. */
+  /** True: the purpose's own rules found nothing in the range, so these are entry-level builds. */
   entry_level: boolean
-  /** Compatible builds costing the budget ± 2000 lei that were ranked. */
+  /** Compatible builds priced in the chosen range that were ranked. */
   alternatives: number
   builds: RankedBuild[]
 }
