@@ -202,6 +202,13 @@
     background: linear-gradient(90deg, #4059bf 0%, #7797ff 60%, #b6c2e2 100%);
   }
   input[type=range]::-moz-range-thumb { height: 18px; width: 18px; border-radius: 50%; background: #ffffff; border: 2px solid #7797ff; }
+  /* Two overlapping sliders make a range (components/PriceRange.tsx): no track of their own,
+     and only the handles take the pointer, so either handle can be dragged. */
+  input[type=range].dual-range { pointer-events: none; }
+  input[type=range].dual-range::-webkit-slider-runnable-track { background: transparent; }
+  input[type=range].dual-range::-moz-range-track { background: transparent; }
+  input[type=range].dual-range::-webkit-slider-thumb { pointer-events: auto; cursor: pointer; }
+  input[type=range].dual-range::-moz-range-thumb { pointer-events: auto; cursor: pointer; }
 }
 
 @keyframes skeleton-shimmer { to { background-position: -200% 0; } }

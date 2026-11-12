@@ -13,7 +13,7 @@ from app.services.catalog_normalize import cpu_chip
 from app.services.compatibility import SelectedPart
 from app.services.tiers import ENTRY_PURPOSES, may_be_empty, pair_allowed, part_allowed
 from app.services.recommend import (
-    PERFORMANCE_MIX, WEIGHTS, Candidate, compatible_builds, criteria, SHOWN_BUILDS, budget_window, pick_near_budget, prefilter, rank_builds,
+    PERFORMANCE_MIX, WEIGHTS, Candidate, compatible_builds, criteria, SHOWN_BUILDS, prefilter, rank_builds, spread_in_range,
 )
 
 router = APIRouter(tags=["Recommendations"])
@@ -36,7 +36,7 @@ def chip(x: Candidate | None) -> str | None:
 
 @router.post("/recommendations", response_model=RecommendResult)
 def recommend(payload: RecommendRequest, db: Annotated[Session, Depends(get_db)]) -> RecommendResult:
-    """Rank every compatible build costing the budget ± 2000 MDL with TOPSIS.
+    """Rank every compatible build priced between min_mdl and max_mdl with TOPSIS.
 
     Alternatives are complete builds that pass all modeled compatibility rules and
     the purpose's tier rules (services.tiers; editing and workstation fall back to their
@@ -58,9 +58,9 @@ def recommend(payload: RecommendRequest, db: Annotated[Session, Depends(get_db)]
         candidates.append(Candidate(SelectedPart(component, specs[component.category].get(component.id)), min(prices)))
 
     # Editing and workstation fall back to entry-level rules when theirs leave no build
-    # near the budget (a low budget), so the page still offers builds that do the work.
+    # in the range (a low budget), so the page still offers builds that do the work.
     for entry in (False, True) if purpose in ENTRY_PURPOSES else (False,):
-        builds, values, shown = _search(candidates, payload.budget_mdl, purpose, entry)
+        builds, values, shown = _search(candidates, payload.min_mdl, payload.max_mdl, purpose, entry)
         if shown:
             break
     ranked = []
@@ -81,8 +81,8 @@ def recommend(payload: RecommendRequest, db: Annotated[Session, Depends(get_db)]
     )
 
 
-def _search(candidates: list[Candidate], budget: Decimal, purpose, entry: bool):
-    """The compatible builds costing `budget` ± 2000 MDL under the purpose's rules
+def _search(candidates: list[Candidate], low: Decimal, high: Decimal, purpose, entry: bool):
+    """The compatible builds priced between `low` and `high` under the purpose's rules
     (`entry`: its entry-level rules), their criteria, and the ones to show."""
     domains: dict[Slot, list[Candidate]] = {s: [] for s in Slot}
     for candidate in candidates:
@@ -92,23 +92,22 @@ def _search(candidates: list[Candidate], budget: Decimal, purpose, entry: bool):
     optional = tuple(s for s in Slot if may_be_empty(purpose, s, entry))
     rule = partial(pair_allowed, purpose, entry=entry)
 
-    low, high = budget_window(budget)
     # A large catalog makes too many builds to list; keep the best parts of each slot first.
-    # When that leaves fewer than six different builds near the budget, retry with more
+    # When that leaves fewer than six different builds in the range, retry with more
     # parts per slot, as long as the search stays small enough to answer quickly.
     for cap in SEARCH_CAPS:
         picked = prefilter(domains, high, purpose, cap=cap, optional=optional, extra=rule)
         builds = list(compatible_builds(picked, high, optional, rule, floor=low))
         scores = rank_builds(builds, purpose)
-        # Up to six variants, the one closest to the budget first, each with its own CPU chip +
-        # GPU chip pair (not just another card maker or Box/Tray packaging).
+        # Up to six variants spread from the low to the high end of the range, each with its own
+        # CPU chip + GPU chip pair (not just another card maker or Box/Tray packaging).
         values = [criteria(b, purpose) for b in builds]
         pairs = [(chip(b[Slot.CPU]), chip(b[Slot.GPU])) for b in builds]
         # When there aren't 6 new pairs (office often has no GPU), other RAM or storage sizes count as variety.
         setups = [pair + (b[Slot.RAM].part.spec.capacity_gb,
                           sum(b[s].part.spec.capacity_gb for s in (Slot.STORAGE, Slot.STORAGE2) if b.get(s)))
                   for pair, b in zip(pairs, builds)]
-        shown = pick_near_budget(scores, [v[0] for v in values], pairs, budget, setups=setups)
+        shown = spread_in_range(scores, [v[0] for v in values], pairs, low, high, setups=setups)
         if len(shown) >= SHOWN_BUILDS or len(builds) > MAX_RETRY_ALTERNATIVES:
             break
     return builds, values, shown
