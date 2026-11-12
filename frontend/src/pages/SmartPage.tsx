@@ -50,7 +50,7 @@ export function SmartPage() {
     }
   }
 
-  // TOPSIS ranking of every compatible build within budget. Waits until the slider stops.
+  // TOPSIS ranking of every compatible build costing the budget ± 2000 lei. Waits until the slider stops.
   const query = `${budget}|${purpose}|${brand}`
   const [answer, setAnswer] = useState<{ query: string; result?: Recommendations; error?: string } | null>(null)
   const loading = answer?.query !== query
@@ -146,8 +146,13 @@ export function SmartPage() {
         </div>
         {loading && <p className="text-sm text-slate-400">Se calculează clasamentul…</p>}
         {error && <p className="text-sm text-red-300">{error}</p>}
+        {!loading && result?.entry_level && (
+          <p className="text-sm text-amber-300">
+            Bugetul e sub cerințele recomandate pentru acest scop, așa că acestea sunt configurații entry-level: fac treaba, dar mai încet.
+          </p>
+        )}
         {!loading && result && !result.builds.length && (
-          <p className="text-sm text-amber-300">Nicio configurație compatibilă care respectă cerințele acestui scop nu încape în buget. Mărește bugetul.</p>
+          <p className="text-sm text-amber-300">Nicio configurație compatibilă care respectă cerințele acestui scop nu costă bugetul ± {format(2000)}. Alege alt buget.</p>
         )}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {result?.builds.map((build) => (

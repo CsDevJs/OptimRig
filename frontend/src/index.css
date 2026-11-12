@@ -230,7 +230,8 @@
 /* ---- Budget presets: solid tier colours, navy text ---- */
 .tier-solid { color: #0a1026; border-color: transparent; transition: filter 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease; }
 .tier-solid:hover { filter: brightness(1.1); box-shadow: 0 8px 20px -8px var(--tier); }
-.tier-solid-green { --tier: #34c37f; background: #34c37f; }
-.tier-solid-blue { --tier: #7797ff; background: #7797ff; }
-.tier-solid-purple { --tier: #a78bfa; background: #a78bfa; }
-.tier-solid-gold { --tier: #e2b74a; background: #e2b74a; }
+/* Muted tones, close to the navy palette's steel greys. */
+.tier-solid-green { --tier: #7fa996; background: #7fa996; }
+.tier-solid-blue { --tier: #8b9dd0; background: #8b9dd0; }
+.tier-solid-purple { --tier: #a196c6; background: #a196c6; }
+.tier-solid-gold { --tier: #c2ad7f; background: #c2ad7f; }

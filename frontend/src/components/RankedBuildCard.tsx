@@ -24,8 +24,7 @@ export function RankedBuildCard({ build, onLoad }: { build: RankedBuild; onLoad:
   return (
     <article className="modern-sleek-card glow rounded-2xl p-4 flex flex-col justify-between gap-3">
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold border bg-violet-400/15 text-violet-300 border-violet-400/30">Locul {build.rank}</span>
+        <div className="flex items-center justify-end gap-2">
           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-900 border border-slate-700 text-violet-200"
             title={`D+ = ${build.distance_best.toFixed(4)}, D- = ${build.distance_worst.toFixed(4)}`}>
             Scor TOPSIS {build.closeness.toFixed(3)}

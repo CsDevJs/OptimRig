@@ -53,7 +53,7 @@ export default function App() {
               </main>
               <footer className="border-t border-slate-800/80 bg-[#0a1026] mt-10 py-5">
                 <p className="max-w-7xl mx-auto px-4 text-center text-xs text-slate-400">
-                  Sistem de configurare și optimizare a asamblării calculatoarelor • Prețuri din Xstore, NeoComputer, Darwin și Ultra
+                  Sistem de configurare și optimizare a asamblării calculatoarelor • Prețuri din Xstore, NeoComputer, Darwin, Ultra și PrimePC
                 </p>
               </footer>
             </BrowserRouter>
