@@ -74,7 +74,7 @@ function AmountBox({ label, mdl, code, onCommit }: {
   return (
     <label className="block">
       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
-      <span className="mt-1 flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 focus-within:border-violet-400/60">
+      <span className="mt-1 flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-3 h-[42px] focus-within:border-violet-400/60">
         <input type="text" inputMode="numeric" value={draft ?? shown} aria-label={`Preț ${label.toLowerCase()}`}
           onChange={(e) => setDraft(e.target.value)} onBlur={commit} onKeyDown={onKey}
           className="w-full min-w-0 bg-transparent font-mono text-sm font-bold text-white outline-none" />

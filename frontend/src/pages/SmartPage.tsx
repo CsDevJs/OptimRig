@@ -20,14 +20,11 @@ const PURPOSES = [
 ] as const
 const PURPOSE_KEY = 'pc-configurator-purpose'
 const pct = (weight: number) => `${Math.round(weight * 100)}%`
-// A preset sets the range to its value ± 2000 lei.
-const PRESET_SPREAD = 2000
 const SLIDER = { min: 0, max: 130000, step: 1000 }
-const PRESETS = [
-  { label: 'Buget', value: 30000, cls: 'tier-green' },
-  { label: 'Mediu', value: 55000, cls: 'tier-blue' },
-  { label: 'High-End', value: 90000, cls: 'tier-purple' },
-  { label: 'Ultra', value: 120000, cls: 'tier-gold' },
+const BRANDS: { id: Brand; label: string }[] = [
+  { id: 'any', label: 'Oricare' },
+  { id: 'AMD', label: 'AMD' },
+  { id: 'Intel', label: 'Intel' },
 ]
 
 export function SmartPage() {
@@ -87,35 +84,30 @@ export function SmartPage() {
         </div>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-800/80">
-          <div className="space-y-4 modern-sleek-card rounded-2xl p-6">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">1. Buget țintă</span>
-              <span className="text-base sm:text-lg font-extrabold font-mono text-violet-300 text-right">{format(low)} – {format(high)}</span>
+          {/* Both cards: the same header row (label left, current choice right), controls at the
+              bottom, so the price boxes and the brand buttons sit on one line. */}
+          <div className="modern-sleek-card rounded-2xl p-6 flex flex-col gap-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">1. Buget</span>
+              <span className="text-base sm:text-lg font-extrabold font-mono text-violet-300">{format(low)} – {format(high)}</span>
             </div>
-            <PriceRange {...SLIDER} low={low} high={high} onChange={(a, b) => setRange([a, b])} />
-            <div className="grid grid-cols-4 gap-2 pt-2">
-              {PRESETS.map((p) => (
-                <button key={p.label} type="button" onClick={() => setRange([p.value - PRESET_SPREAD, p.value + PRESET_SPREAD])}
-                  aria-pressed={low === p.value - PRESET_SPREAD && high === p.value + PRESET_SPREAD}
-                  className={`tier-btn p-2 rounded-xl border border-slate-800 bg-slate-900 text-slate-300 text-left hover:scale-105 ${p.cls}`}>
-                  <div className="text-[11px] font-bold">{p.label}</div>
-                  <div className="text-[10px] font-mono opacity-80">{format(p.value)}</div>
-                </button>
-              ))}
+            <div className="mt-auto">
+              <PriceRange {...SLIDER} low={low} high={high} onChange={(a, b) => setRange([a, b])} />
             </div>
           </div>
 
-          <div className="space-y-4 modern-sleek-card rounded-2xl p-6">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-3">2. Brand CPU</span>
-              <div className="grid grid-cols-3 gap-2">
-                {(['any', 'AMD', 'Intel'] as Brand[]).map((b, i) => (
-                  <button key={b} type="button" onClick={() => setBrand(b)}
-                    className={`py-2.5 px-2 rounded-xl text-xs font-bold border ${hov(i)} hover:scale-105 ${brand === b ? 'border-violet-400/50 bg-violet-400/20 text-white' : 'border-slate-800 bg-slate-900 text-slate-300'}`}>
-                    {b === 'any' ? 'Oricare' : b}
-                  </button>
-                ))}
-              </div>
+          <div className="modern-sleek-card rounded-2xl p-6 flex flex-col gap-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">2. Brand CPU</span>
+              <span className="text-base sm:text-lg font-extrabold text-violet-300">{BRANDS.find((b) => b.id === brand)?.label}</span>
+            </div>
+            <div className="mt-auto grid grid-cols-3 gap-2" role="radiogroup" aria-label="Brand CPU">
+              {BRANDS.map(({ id, label }, i) => (
+                <button key={id} type="button" role="radio" aria-checked={brand === id} onClick={() => setBrand(id)}
+                  className={`h-[42px] px-2 rounded-xl text-xs font-bold border ${hov(i)} hover:scale-105 ${brand === id ? 'border-violet-400/50 bg-violet-400/20 text-white' : 'border-slate-800 bg-slate-900 text-slate-300'}`}>
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
 
