@@ -70,8 +70,9 @@ def _drives_fit(build: Build) -> bool:
 
 
 def compatible_builds(domains: dict[Slot, list[Candidate]], budget: Decimal,
-                      optional: tuple[Slot, ...] = OPTIONAL, extra: PairRule | None = None) -> Iterator[Build]:
-    """Yield every complete, compatible build whose total price is within `budget`.
+                      optional: tuple[Slot, ...] = OPTIONAL, extra: PairRule | None = None,
+                      floor: Decimal = Decimal(0)) -> Iterator[Build]:
+    """Yield every complete, compatible build whose total price is between `floor` and `budget`.
 
     `domains` holds the purchasable parts of each slot (the second drive's are storage
     parts). Slots in `optional` may also be empty (None); GPU and cooler only when the
@@ -104,7 +105,7 @@ def compatible_builds(domains: dict[Slot, list[Candidate]], budget: Decimal,
     }
     cents = lambda x: x.cents if x else 0
     power = lambda x: x.power_w if x else 0
-    limit = int(budget * 100)
+    limit, minimum = int(budget * 100), int(floor * 100)
     build: Build = {}
 
     def extend(i: int, cost: int, draw: int, domains: list[list[Candidate | None]]) -> Iterator[Build]:
@@ -120,8 +121,10 @@ def compatible_builds(domains: dict[Slot, list[Candidate]], budget: Decimal,
             total = cost + cents(x)
             reduced = [[y for y in domain if (id(x), id(y)) in compatible[category, c]]
                        for c, domain in zip(later, domains[1:])]
-            # Prune when a later category is left empty or even its cheapest part exceeds the budget.
-            if any(not d for d in reduced) or total + sum(min(map(cents, d)) for d in reduced) > limit:
+            # Prune when a later category is left empty, even its cheapest parts exceed the
+            # budget, or even its dearest parts stay under the floor.
+            if (any(not d for d in reduced) or total + sum(min(map(cents, d)) for d in reduced) > limit
+                    or total + sum(max(map(cents, d)) for d in reduced) < minimum):
                 continue
             build[category] = x
             yield from extend(i + 1, total, draw + (0 if category == Slot.PSU else power(x)), reduced)
@@ -303,34 +306,32 @@ def _strict_fit(a: Slot, x: Candidate | None, b: Slot, y: Candidate | None) -> b
 # ---------- Which ranked builds to show ----------
 
 SHOWN_BUILDS = 6
+# Shown builds cost the budget give or take this much (MDL).
+BUDGET_TOLERANCE = Decimal(2000)
 
 
-def spread_by_price(scores: list[TopsisScore], prices: list[Decimal], pairs: list[tuple], budget: Decimal,
-                    count: int = SHOWN_BUILDS, setups: list[tuple] | None = None) -> list[tuple[int, TopsisScore]]:
-    """Builds to show, as (rank, score), cheapest first.
+def budget_window(budget: Decimal) -> tuple[Decimal, Decimal]:
+    """Lowest and highest total price of a shown build."""
+    return max(Decimal(0), budget - BUDGET_TOLERANCE), budget + BUDGET_TOLERANCE
 
-    The range from the cheapest ranked build to the budget is split into `count` equal
-    price bands; each band shows its best-ranked build, so the variants run from cheap to
-    near the budget. No two shown builds share a CPU chip + GPU chip pair (`pairs[i]`).
-    When some bands are empty, the best-ranked remaining builds with new pairs fill in;
-    when no new pair is left, builds without a GPU (office) and with a new `setups[i]`
-    (pair plus RAM and storage size) do; a build with a GPU never repeats a pair.
+
+def pick_near_budget(scores: list[TopsisScore], prices: list[Decimal], pairs: list[tuple], budget: Decimal,
+                     count: int = SHOWN_BUILDS, setups: list[tuple] | None = None) -> list[tuple[int, TopsisScore]]:
+    """Builds to show, as (rank, score): first the build whose price is closest to the
+    budget, then the best-ranked builds, at most `count` in all.
+
+    No two shown builds share a CPU chip + GPU chip pair (`pairs[i]`). When no new pair
+    is left, builds without a GPU (office) with a new `setups[i]` (pair plus RAM and
+    storage size) fill in; a build with a GPU never repeats a pair. Fewer than `count`
+    are returned when there are not enough different builds.
     `prices[i]`, `pairs[i]` and `setups[i]` belong to the build at `scores[k].index == i`.
     """
     if not scores:
         return []
-    low = min(prices)
-    width = (budget - low) / count
-    band_of = lambda price: count - 1 if width <= 0 else min(count - 1, int((price - low) / width))
     ranked = list(enumerate(scores, start=1))
-    chosen: list[tuple[int, TopsisScore]] = []
-    bands, used = set(), set()
-    for rank, score in ranked:  # best first: the first build seen in a band is its best
-        band, pair = band_of(prices[score.index]), pairs[score.index]
-        if band not in bands and pair not in used:
-            bands.add(band)
-            used.add(pair)
-            chosen.append((rank, score))
+    first = min(ranked, key=lambda item: (abs(prices[item[1].index] - budget), item[0]))
+    chosen = [first]
+    used = {pairs[first[1].index]}
     for rank, score in ranked:
         if len(chosen) >= count:
             break
@@ -346,4 +347,4 @@ def spread_by_price(scores: list[TopsisScore], prices: list[Decimal], pairs: lis
             if pairs[score.index][1] is None and setups[score.index] not in shown:
                 shown.add(setups[score.index])
                 chosen.append((rank, score))
-    return sorted(chosen, key=lambda item: prices[item[1].index])
+    return chosen

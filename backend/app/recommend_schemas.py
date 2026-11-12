@@ -22,7 +22,7 @@ class CriteriaWeights(BaseModel):
 
 
 class RankedBuild(BaseModel):
-    rank: int = Field(description="Position in the full TOPSIS ranking of all alternatives")
+    rank: int = Field(description="Position in the TOPSIS ranking of all alternatives")
     components: dict[Slot, int | None] = Field(description="null: no separate GPU or cooler, or no second drive (storage2)")
     price_mdl: Decimal = Field(description="Sum of each part's cheapest in-stock offer")
     performance: float
@@ -35,5 +35,6 @@ class RankedBuild(BaseModel):
 class RecommendResult(BaseModel):
     weights: CriteriaWeights
     performance_mix: dict[Literal["cpu", "gpu"], float]
-    alternatives: int = Field(description="Compatible builds within budget that were ranked")
-    builds: list[RankedBuild] = Field(description="Up to 6 builds, cheapest first: the best-ranked build of each of 6 price bands between the cheapest build and the budget, each with a different CPU chip + GPU chip pair")
+    entry_level: bool = Field(default=False, description="True: the purpose's own rules left no build near the budget, so these follow its entry-level rules (editing, workstation)")
+    alternatives: int = Field(description="Compatible builds costing the budget ± 2000 MDL that were ranked")
+    builds: list[RankedBuild] = Field(description="Up to 6 builds costing the budget ± 2000 MDL, each with a different CPU chip + GPU chip pair: first the one closest to the budget, then the best-ranked; fewer when there are not 6 different builds")

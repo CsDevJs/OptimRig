@@ -1,7 +1,4 @@
-import { Camera, Code, ShieldHalf, Upload } from 'lucide-react'
-import { useRef, useState, type ChangeEvent } from 'react'
-
-import { useToast } from '../context/ToastContext'
+import { Code, ShieldHalf } from 'lucide-react'
 
 const FOUNDERS = [
   { name: 'Buza Alin', role: 'Front-End Developer & UI/UX Specialist', ring: 'border-violet-400/60', text: 'text-violet-300' },
@@ -17,54 +14,14 @@ const TECH = [
   ['AC-3 · TOPSIS · Min-Cost Max-Flow', 'bg-sky-400/15 border-sky-400/30 text-sky-200'],
 ]
 
-function photoKey(index: number) {
-  return `founderPhoto_${index}`
-}
-
-function FounderCard({ index, name, role, ring, text }: (typeof FOUNDERS)[number] & { index: number }) {
-  const toast = useToast()
-  const input = useRef<HTMLInputElement>(null)
-  const [photo, setPhoto] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(photoKey(index))
-    } catch {
-      return null
-    }
-  })
-
-  const onFile = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const url = String(reader.result)
-      setPhoto(url)
-      try {
-        localStorage.setItem(photoKey(index), url)
-        toast({ title: 'Poză actualizată', message: 'Fotografia a fost salvată în acest browser.', tone: 'ok' })
-      } catch {
-        toast({ title: 'Poza nu s-a salvat', message: 'Imaginea e prea mare pentru stocarea browserului.', tone: 'error' })
-      }
-    }
-    reader.readAsDataURL(file)
-  }
-
+function FounderCard({ name, role, ring, text }: (typeof FOUNDERS)[number]) {
   const initials = name.split(' ').map((w) => w[0]).join('')
   return (
     <div className="modern-sleek-card glow rounded-2xl p-6 text-center space-y-4 flex flex-col justify-between">
       <div className="space-y-4">
-        <button type="button" onClick={() => input.current?.click()} title={`Schimbă poza lui ${name}`}
-          className="relative w-32 h-32 mx-auto group block">
-          <span className={`w-full h-full rounded-2xl overflow-hidden border-2 ${ring} bg-slate-900 flex items-center justify-center`}>
-            {photo
-              ? <img src={photo} alt={name} className="w-full h-full object-cover object-top transition duration-300 group-hover:scale-105" />
-              : <span className={`text-4xl font-extrabold ${text}`}>{initials}</span>}
-          </span>
-          <span className="absolute inset-0 rounded-2xl bg-black/55 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center text-white text-[10px] font-bold gap-1">
-            <Upload size={14} className={text} /> Schimbă poza
-          </span>
-        </button>
-        <input ref={input} type="file" accept="image/*" className="hidden" onChange={onFile} />
+        <div className={`w-32 h-32 mx-auto rounded-2xl border-2 ${ring} bg-slate-900 flex items-center justify-center`}>
+          <span className={`text-4xl font-extrabold ${text}`}>{initials}</span>
+        </div>
         <div>
           <h3 className="text-base font-extrabold text-white">{name}</h3>
           <p className={`text-xs font-medium ${text}`}>{role}</p>
@@ -78,18 +35,13 @@ function FounderCard({ index, name, role, ring, text }: (typeof FOUNDERS)[number
 export function FoundersPage() {
   return (
     <section className="space-y-6">
-      <div className="slate-glow-card glow rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-extrabold text-white">Fondatorii site-ului & echipa UTM</h2>
-          <p className="text-xs text-slate-300">Studenți UTM, Securitate Informațională (Anul II)</p>
-        </div>
-        <span className="text-[11px] text-violet-300 bg-violet-500/10 border border-violet-400/30 px-3 py-1.5 rounded-xl font-medium flex items-center gap-1.5 w-fit">
-          <Camera size={12} /> Apasă pe un avatar pentru a încărca o fotografie
-        </span>
+      <div className="slate-glow-card glow rounded-2xl p-5">
+        <h2 className="text-lg font-extrabold text-white">Fondatorii site-ului & echipa UTM</h2>
+        <p className="text-xs text-slate-300">Studenți UTM, Securitate Informațională (Anul II)</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {FOUNDERS.map((f, i) => <FounderCard key={f.name} index={i} {...f} />)}
+        {FOUNDERS.map((f) => <FounderCard key={f.name} {...f} />)}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">

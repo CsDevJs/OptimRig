@@ -190,9 +190,10 @@ def test_recommendations_are_compatible_and_within_budget(catalog_client):
     body = response.json()
     assert body["weights"] == {"price": 0.35, "performance": 0.5, "power": 0.15}
     assert body["alternatives"] >= len(body["builds"]) > 0
-    assert 1 in [b["rank"] for b in body["builds"]] and len(body["builds"]) <= 6
+    assert len(body["builds"]) <= 6
     prices = [D(b["price_mdl"]) for b in body["builds"]]
-    assert prices == sorted(prices)  # cheapest first
+    distance = [abs(p - 30000) for p in prices]
+    assert distance[0] == min(distance)  # the build closest to the budget comes first
     def chips(build):
         cpu = client.get(f"/components/{build['components']['cpu']}").json()
         gpu_id = build["components"]["gpu"]
@@ -201,7 +202,7 @@ def test_recommendations_are_compatible_and_within_budget(catalog_client):
     pairs = [chips(b) for b in body["builds"]]
     assert len(set(pairs)) == len(pairs)
     for build in body["builds"]:
-        assert D(build["price_mdl"]) <= 30000
+        assert 28000 <= D(build["price_mdl"]) <= 32000  # budget ± 2000 lei
         selection = {c: i for c, i in build["components"].items() if i is not None}
         check = client.post("/compatibility/check", json={"components": selection}).json()
         assert check["status"] == "compatible"
@@ -218,44 +219,54 @@ def test_no_build_fits_a_tiny_budget(catalog_client):
 
 # ---------- Which builds are shown ----------
 
-def test_spread_by_price_takes_the_best_of_each_band():
-    from app.services.recommend import spread_by_price
+def test_budget_window():
+    from app.services.recommend import budget_window
+    assert budget_window(D(30000)) == (D(28000), D(32000))
+    assert budget_window(D(1000)) == (D(0), D(3000))
+
+
+def test_closest_to_budget_comes_first_then_best_ranked():
+    from app.services.recommend import pick_near_budget
     from app.services.topsis import TopsisScore
-    # Index = build. Cheapest 0, budget 600 -> six bands of 100 lei.
-    prices = [D(p) for p in (0, 60, 150, 250, 350, 450, 590, 120)]
+    prices = [D(p) for p in (29000, 30100, 31500, 28500, 29900, 30500, 31000, 28200)]
     pairs = [("A", "X"), ("B", "X"), ("C", "X"), ("A", "X"), ("D", "Y"), ("E", "Y"), ("F", "Z"), ("G", "Z")]
-    order = [3, 0, 1, 7, 2, 4, 5, 6]  # ranks: build 3 is first, then 0, 1, 7, ...
-    scores = [TopsisScore(i, 0, 0, 1 - k / 10) for k, i in enumerate(order)]
-    shown = spread_by_price(scores, prices, pairs, D(600))
-    # Band 2 (200-300): build 3, rank 1. Band 0: build 0 shares pair A/X with build 3, so build 1.
-    # Band 1 (100-200): build 7 (rank 4) beats build 2 (rank 5). Bands 3, 4, 5: builds 4, 5, 6.
-    assert [s.index for _, s in shown] == [1, 7, 3, 4, 5, 6]
-    assert [rank for rank, _ in shown] == [3, 4, 1, 6, 7, 8]
+    scores = [TopsisScore(i, 0, 0, 1 - i / 10) for i in range(8)]  # build i has rank i + 1
+    shown = pick_near_budget(scores, prices, pairs, D(30000))
+    # Builds 1 and 4 are both 100 lei away; build 1 ranks higher. Build 3 repeats A/X.
+    assert [s.index for _, s in shown] == [1, 0, 2, 4, 5, 6]
+    assert [rank for rank, _ in shown] == [2, 1, 3, 5, 6, 7]
+    assert pick_near_budget([], [], [], D(30000)) == []
 
 
-def test_spread_by_price_fills_empty_bands_with_new_pairs():
-    from app.services.recommend import spread_by_price
+def test_fewer_builds_when_there_are_not_six_different_ones():
+    from app.services.recommend import pick_near_budget
     from app.services.topsis import TopsisScore
-    prices = [D(p) for p in (100, 101, 102, 103, 104, 105, 106, 990)]
-    pairs = [(c, None) for c in "ABCDEFGA"]
-    scores = [TopsisScore(i, 0, 0, 1 - i / 10) for i in range(8)]
-    shown = spread_by_price(scores, prices, pairs, D(1000))
-    assert len(shown) == 6 and len({pairs[s.index] for _, s in shown}) == 6
-    assert spread_by_price([], [], [], D(1000)) == []
+    prices = [D(p) for p in (30000, 30500, 31000)]
+    pairs = [("A", "X"), ("A", "X"), ("B", "X")]
+    scores = [TopsisScore(i, 0, 0, 1 - i / 10) for i in range(3)]
+    assert [s.index for _, s in pick_near_budget(scores, prices, pairs, D(30000))] == [0, 2]
 
 
-def test_spread_by_price_never_repeats_a_pair_with_a_gpu():
-    from app.services.recommend import spread_by_price
+def test_a_pair_with_a_gpu_is_never_repeated():
+    from app.services.recommend import pick_near_budget
     from app.services.topsis import TopsisScore
     # Two gaming pairs, each in builds that differ only in RAM or storage size: two shown.
-    prices = [D(p) for p in (100, 200, 300, 400)]
+    prices = [D(p) for p in (1000, 1000, 1000, 1000)]
     pairs = [("A", "X"), ("A", "X"), ("A", "Y"), ("A", "Y")]
     setups = [pair + (size,) for pair, size in zip(pairs, (16, 32, 16, 32))]
     scores = [TopsisScore(i, 0, 0, 1 - i / 10) for i in range(4)]
-    shown = spread_by_price(scores, prices, pairs, D(1000), setups=setups)
+    shown = pick_near_budget(scores, prices, pairs, D(1000), setups=setups)
     assert [s.index for _, s in shown] == [0, 2]
     # Without a GPU (office), another RAM or storage size does count as a variant.
     office = [("A", None)] * 4
     setups = [pair + (size,) for pair, size in zip(office, (16, 32, 16, 64))]
-    shown = spread_by_price(scores, prices, office, D(1000), setups=setups)
+    shown = pick_near_budget(scores, prices, office, D(1000), setups=setups)
     assert [s.index for _, s in shown] == [0, 1, 3]
+
+
+def test_recommendations_cost_the_budget_give_or_take_2000_lei(catalog_client):
+    client, _ = catalog_client
+    for budget in (25000, 30000, 40000):
+        body = client.post("/recommendations", json={"budget_mdl": budget, "purpose": "gaming"}).json()
+        prices = [D(b["price_mdl"]) for b in body["builds"]]
+        assert all(budget - 2000 <= p <= budget + 2000 for p in prices)

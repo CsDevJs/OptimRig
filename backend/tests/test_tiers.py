@@ -57,13 +57,30 @@ def test_office():
     assert not part_allowed("office", Slot.CPU, cpu(6, 12, igpu=False))  # needs integrated graphics
     assert not part_allowed("office", Slot.CPU, cpu(16, 32, model="Ryzen 9 9950X"))  # above the Ryzen 7 class
     assert part_allowed("office", Slot.CPU, cpu(8, 16, model="Ryzen 7 8700G"))
-    assert not part_allowed("office", Slot.GPU, gpu(8)) and may_be_empty("office", Slot.GPU)
-    assert [part_allowed("office", Slot.RAM, ram(gb)) for gb in (4, 8, 16, 32)] == [False, True, True, False]
+    # Integrated graphics, or a card that is an upgrade over it.
+    assert may_be_empty("office", Slot.GPU)
+    assert part_allowed("office", Slot.GPU, gpu(4)) and not part_allowed("office", Slot.GPU, gpu(2))
+    assert [part_allowed("office", Slot.RAM, ram(gb)) for gb in (4, 8, 16, 32, 64, 128)] == [
+        False, True, True, True, True, False]
     assert part_allowed("office", Slot.STORAGE, drive("nvme", 512))
     assert part_allowed("office", Slot.STORAGE, drive("sata_ssd", 256))
+    assert part_allowed("office", Slot.STORAGE, drive("nvme", 2000))
     assert not part_allowed("office", Slot.STORAGE, drive("sata_ssd", 480, form="2.5"))  # M.2 only
-    assert not part_allowed("office", Slot.STORAGE, drive("nvme", 1000))
-    assert not part_allowed("office", Slot.STORAGE2, drive("hdd", 1000, form="3.5"))
+    assert not part_allowed("office", Slot.STORAGE, drive("nvme", 128))
+    assert part_allowed("office", Slot.STORAGE2, drive("hdd", 1000, form="3.5"))
+    assert not part_allowed("office", Slot.STORAGE2, drive("hdd", 320, form="3.5"))
+    assert may_be_empty("office", Slot.STORAGE2)
+
+
+def test_office_gets_a_card_only_after_ram_and_storage_upgrades():
+    card = gpu(8)
+    assert not pair_allowed("office", Slot.GPU, card, Slot.RAM, ram(16))
+    assert pair_allowed("office", Slot.RAM, ram(32), Slot.GPU, card)
+    assert not pair_allowed("office", Slot.STORAGE, drive("nvme", 512), Slot.GPU, card)
+    assert pair_allowed("office", Slot.GPU, card, Slot.STORAGE, drive("nvme", 1000))
+    # Without a card, any RAM and drive size goes.
+    assert pair_allowed("office", Slot.GPU, None, Slot.RAM, ram(8))
+    assert pair_allowed("office", Slot.STORAGE, drive("nvme", 256), Slot.GPU, None)
 
 
 def test_gaming():
@@ -108,6 +125,28 @@ def test_workstation():
     assert not part_allowed("workstation", Slot.PSU, psu(750)) and part_allowed("workstation", Slot.PSU, psu(850))
     assert part_allowed("workstation", Slot.PSU, psu(1000, "not stated"))  # unknown is not a lower rating
     assert not part_allowed("workstation", Slot.PSU, psu(1000, "80+ Bronze"))
+
+
+def test_entry_level_editing_and_workstation():
+    for purpose in ("editing", "workstation"):
+        assert part_allowed(purpose, Slot.CPU, cpu(6, 12), entry=True)
+        assert not part_allowed(purpose, Slot.CPU, cpu(4, 8), entry=True)
+        assert part_allowed(purpose, Slot.GPU, gpu(8), entry=True) and not part_allowed(purpose, Slot.GPU, gpu(6), entry=True)
+        assert not may_be_empty(purpose, Slot.GPU, entry=True)
+        assert part_allowed(purpose, Slot.RAM, ram(16), entry=True) and not part_allowed(purpose, Slot.RAM, ram(8), entry=True)
+        assert part_allowed(purpose, Slot.STORAGE, drive("nvme", 500, interface="PCIe 3.0 x4"), entry=True)
+        assert not part_allowed(purpose, Slot.STORAGE, drive("sata_ssd", 500), entry=True)
+        assert part_allowed(purpose, Slot.PSU, psu(550, "80+ Bronze"), entry=True)  # by load
+        assert not pair_allowed(purpose, Slot.COOLER, cooler(80), Slot.CPU, cpu(6, 12, tdp=65), entry=True)
+        assert pair_allowed(purpose, Slot.GPU, gpu(24), Slot.RAM, ram(16), entry=True)
+    assert not part_allowed("editing", Slot.RAM, ram(64), entry=True)
+    assert part_allowed("workstation", Slot.RAM, ram(64), entry=True)
+    # Editing may add a second drive, or leave it out; workstation uses one.
+    assert may_be_empty("editing", Slot.STORAGE2, entry=True)
+    assert part_allowed("editing", Slot.STORAGE2, drive("hdd", 1000, form="3.5"), entry=True)
+    assert not part_allowed("workstation", Slot.STORAGE2, drive("hdd", 1000, form="3.5"), entry=True)
+    # Other purposes ignore `entry`.
+    assert not part_allowed("gaming", Slot.GPU, gpu(4), entry=True)
 
 
 def test_cooler_needs_rating_and_headroom():
