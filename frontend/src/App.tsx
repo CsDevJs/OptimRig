@@ -8,6 +8,7 @@ import { Header } from './components/Header'
 import { CurrencyProvider } from './context/CurrencyContext'
 import { ToastProvider } from './context/ToastContext'
 import { AccountPage } from './pages/AccountPage'
+import { AdminPage } from './pages/AdminPage'
 import { AuthPage } from './pages/AuthPage'
 import { ExchangePage } from './pages/ExchangePage'
 import { FoundersPage } from './pages/FoundersPage'
@@ -43,6 +44,7 @@ export default function App() {
                   <Route path="/fondatori" element={<FoundersPage />} />
                   <Route path="/autentificare" element={<AuthPage />} />
                   <Route path="/cont" element={<AccountPage />} />
+                  <Route path="/admin" element={<AdminPage />} />
                   <Route path="*" element={
                     <div className="text-center py-16 space-y-3">
                       <h1 className="text-2xl font-extrabold text-white">Pagina nu există</h1>

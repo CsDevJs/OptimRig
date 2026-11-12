@@ -1,6 +1,7 @@
 """The users vault (run from backend/).
 
     python -m scripts.vault show               # id, email of every account
+    python -m scripts.vault emails             # only the emails, one per line
     python -m scripts.vault copy-to-database   # data/users.vault -> the user_vault table
 
 `show` reads the vault the server uses (VAULT_STORAGE: the file, or the database).
@@ -31,6 +32,15 @@ def show() -> None:
         print(f"  {user.id:>5}  {user.email}")
 
 
+def emails() -> None:
+    try:
+        users = get_vault().all()
+    except VaultError as error:
+        sys.exit(f"Can't read the vault: {error}")
+    for user in users:
+        print(user.email)
+
+
 def copy_to_database() -> None:
     from app.db.session import engine
 
@@ -51,7 +61,7 @@ def copy_to_database() -> None:
 
 
 def main() -> None:
-    commands = {"show": show, "copy-to-database": copy_to_database}
+    commands = {"show": show, "emails": emails, "copy-to-database": copy_to_database}
     if len(sys.argv) != 2 or sys.argv[1] not in commands:
         print(__doc__)
         sys.exit(2)

@@ -94,6 +94,8 @@ export const api = {
   login: (login: string, password: string) =>
     request<Token>('/auth/login', { method: 'POST', body: { login, password } }),
   me: () => request<User>('/auth/me'),
+  /** Every account's email; only for accounts in ADMIN_EMAILS (403 otherwise). */
+  adminEmails: () => request<{ emails: string[] }>('/admin/emails'),
 
   builds: {
     list: () => request<BuildSummary[]>('/builds'),
