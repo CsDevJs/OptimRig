@@ -233,17 +233,3 @@
   color: #fff;
 }
 .hov:hover svg { color: var(--hc, #7797ff); }
-
-/* ---- Budget presets: slate at rest like the brand buttons; on hover and when selected
-   (aria-pressed) the same colours and tint as the .hov-* hovers above. Unlayered, so it wins
-   over Tailwind's utilities. */
-.tier-btn { transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, transform 0.25s ease; }
-.tier-btn:hover, .tier-btn[aria-pressed="true"] {
-  border-color: var(--tier);
-  background-color: color-mix(in srgb, var(--tier) 20%, #182345);
-  color: #fff;
-}
-.tier-green { --tier: #34c37f; }
-.tier-blue { --tier: #7797ff; }
-.tier-purple { --tier: #a78bfa; }
-.tier-gold { --tier: #e2b74a; }

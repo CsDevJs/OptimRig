@@ -1,9 +1,12 @@
 import { Code, ShieldHalf } from 'lucide-react'
+import buzaAlin from '../assets/founders/buza-alin.webp'
+import grosuVladislav from '../assets/founders/grosu-vladislav.png'
+import bortaAdrian from '../assets/founders/borta-adrian.webp'
 
 const FOUNDERS = [
-  { name: 'Buza Alin', role: 'Front-End Developer & UI/UX Specialist', ring: 'border-violet-400/60', text: 'text-violet-300' },
-  { name: 'Grosu Vladislav', role: 'Database Developer & Architecture Lead', ring: 'border-sky-400/60', text: 'text-sky-300' },
-  { name: 'Borta Adrian', role: 'Back-End Developer & Security Architect', ring: 'border-pink-400/60', text: 'text-pink-300' },
+  { name: 'Buza Alin', photo: buzaAlin, role: 'Front-End Developer & UI/UX Specialist', ring: 'border-violet-400/60', text: 'text-violet-300' },
+  { name: 'Grosu Vladislav', photo: grosuVladislav, role: 'Database Developer & Architecture Lead', ring: 'border-sky-400/60', text: 'text-sky-300' },
+  { name: 'Borta Adrian', photo: bortaAdrian, role: 'Back-End Developer & Security Architect', ring: 'border-pink-400/60', text: 'text-pink-300' },
 ]
 
 const TECH = [
@@ -14,14 +17,11 @@ const TECH = [
   ['AC-3 · TOPSIS · Min-Cost Max-Flow', 'bg-sky-400/15 border-sky-400/30 text-sky-200'],
 ]
 
-function FounderCard({ name, role, ring, text }: (typeof FOUNDERS)[number]) {
-  const initials = name.split(' ').map((w) => w[0]).join('')
+function FounderCard({ name, photo, role, ring, text }: (typeof FOUNDERS)[number]) {
   return (
     <div className="modern-sleek-card glow rounded-2xl p-6 text-center space-y-4 flex flex-col justify-between">
       <div className="space-y-4">
-        <div className={`w-32 h-32 mx-auto rounded-2xl border-2 ${ring} bg-slate-900 flex items-center justify-center`}>
-          <span className={`text-4xl font-extrabold ${text}`}>{initials}</span>
-        </div>
+        <img src={photo} alt={name} className={`w-32 h-32 mx-auto rounded-2xl border-2 ${ring} bg-slate-900 object-cover`} />
         <div>
           <h3 className="text-base font-extrabold text-white">{name}</h3>
           <p className={`text-xs font-medium ${text}`}>{role}</p>
