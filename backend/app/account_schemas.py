@@ -49,7 +49,7 @@ class BuildWrite(CompatibilityRequest):
 
 
 class BuildItemRead(BaseModel):
-    category: Slot = Field(description="The slot: a category, or storage2 for a second drive")
+    category: Slot = Field(description="The slot: a category, ram2-ram4 for extra RAM kits, or storage2-storage4 for extra drives")
     component: ComponentRead
     saved_price_mdl: Decimal | None = Field(description="Cheapest in-stock price when this part was added")
     saved_store: StoreRead | None

@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from app.compatibility_schemas import FilterRequest, FilterResult
-from app.db.models import Category, Slot
+from app.db.models import Category, RAM_SLOTS, STORAGE_SLOTS, Slot
 from app.services.ac3 import filter_catalog
 from app.services.compatibility import LIMITATIONS
 
@@ -67,7 +67,8 @@ def filter_compatibility(payload: FilterRequest, db: Annotated[Session, Depends(
         domains[slot] = [SelectedPart(part, specs[slot.category].get(part.id)) for part in catalog
                          if part.category == slot.category and
                          (slot not in payload.components or part.id == payload.components[slot])]
-        if slot in (Slot.GPU, Slot.COOLER, Slot.STORAGE2) and slot not in payload.components:
+        optional = slot in (Slot.GPU, Slot.COOLER) or slot in RAM_SLOTS[1:] or slot in STORAGE_SLOTS[1:]
+        if optional and slot not in payload.components:
             domains[slot].append(None)
     filtered = filter_catalog(domains)
     ids = {category: [None if part is None else part.component.id for part in values]
@@ -83,7 +84,7 @@ def filter_compatibility(payload: FilterRequest, db: Annotated[Session, Depends(
             "Arc consistency is not proof of a complete valid build. Run /compatibility/check on final selections.",
             "Budget, stock, and total PSU demand are not AC-3 binary constraints.",
             "Null in a GPU or cooler domain means no separate component; CPU capabilities constrain this choice.",
-            "storage2 is an optional second drive; null means none. Two drives also need two board connectors, "
-            "which /compatibility/check verifies.",
+            "ram2-ram4 and storage2-storage4 are optional extra kits and drives; null means none. Together they "
+            "also need enough board slots and connectors, which /compatibility/check verifies.",
         ],
     )

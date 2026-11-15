@@ -5,8 +5,9 @@ from sqlalchemy import func, select
 
 from app.db.models import (
     CaseSpec, Category, Component, CoolerSpec, CpuSpec, GpuSpec,
-    MotherboardSpec, PsuSpec, RamSpec, StorageSpec,
+    MotherboardSpec, PsuSpec, RamSpec, Slot, StorageSpec,
 )
+from app.compatibility_schemas import CompatibilityRequest
 from app.services.compatibility import SelectedPart, check_build, check_pair
 
 
@@ -301,3 +302,44 @@ def test_endpoint_checks_complete_seeded_build(catalog_client):
     assert body["missing_categories"] == []
     assert not [issue for issue in body["issues"] if issue["severity"] == "error"]
     assert body["estimated_power_w"] == sum(part.power_draw_w for part in components if part.category != Category.PSU)
+
+
+def _extra(slot, component_id, spec):
+    return {slot: SelectedPart(Component(id=component_id, category=slot.category, power_draw_w=5), spec)}
+
+
+def test_extra_ram_kits_share_the_board_slots_and_capacity(parts):
+    # The 2x32 GB kit plus an identical one fill the board's 4 slots and stay under 128 GB.
+    twin = check_build({**parts, Slot.RAM2: parts[Category.RAM]})
+    assert twin.status == "compatible" and {"ram_slots_total", "ram_capacity_total"} <= set(twin.checked_rules)
+    third = _extra(Slot.RAM3, 50, RamSpec(memory_type="DDR4", capacity_gb=16, modules=1))
+    over = check_build({**parts, Slot.RAM2: parts[Category.RAM], **third})
+    assert "ram_slots_total" in issue_codes(over, "error")
+    big = _extra(Slot.RAM2, 51, RamSpec(memory_type="DDR4", capacity_gb=128, modules=2))
+    assert "ram_capacity_total" in issue_codes(check_build({**parts, **big}), "error")
+
+
+def test_ram_kits_must_be_one_memory_type(parts):
+    ddr5 = _extra(Slot.RAM2, 52, RamSpec(memory_type="DDR5", capacity_gb=32, modules=2))
+    without_board = {k: v for k, v in parts.items() if k != Category.MOTHERBOARD}
+    result = check_build({**without_board, **ddr5})
+    assert "ram_kits_memory" in issue_codes(result, "error")
+    _, issues, _ = check_pair(parts[Category.RAM], ddr5[Slot.RAM2])
+    assert [i.code for i in issues] == ["ram_kits_memory"]
+
+
+def test_drives_beyond_two_need_connectors(parts):
+    m2 = parts[Category.STORAGE]
+    ok = check_build({**parts, Slot.STORAGE2: m2})
+    assert ok.status == "compatible"
+    over = check_build({**parts, Slot.STORAGE2: m2, Slot.STORAGE3: m2})
+    assert "storage_m2_count" in issue_codes(over, "error")
+    sata = _extra(Slot.STORAGE3, 53, StorageSpec(storage_type="sata", form_factor="2.5\""))
+    assert check_build({**parts, Slot.STORAGE2: m2, **sata}).status == "compatible"
+
+
+def test_ids_may_repeat_only_within_ram_or_storage():
+    assert CompatibilityRequest(components={"ram": 3, "ram2": 3, "storage": 5, "storage4": 5})
+    with pytest.raises(ValueError):
+        CompatibilityRequest(components={"ram": 3, "storage": 3})
+

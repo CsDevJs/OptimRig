@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.db.models import SPEC_MODELS, Availability, Category, Component, GpuSpec, Slot
+from app.db.models import SPEC_MODELS, Availability, Category, Component, GpuSpec, RECOMMEND_SLOTS, Slot
 from app.db.session import get_db
 from app.recommend_schemas import CriteriaWeights, RankedBuild, RecommendRequest, RecommendResult
 from app.services.catalog_normalize import cpu_chip
@@ -84,12 +84,12 @@ def recommend(payload: RecommendRequest, db: Annotated[Session, Depends(get_db)]
 def _search(candidates: list[Candidate], low: Decimal, high: Decimal, purpose, entry: bool):
     """The compatible builds priced between `low` and `high` under the purpose's rules
     (`entry`: its entry-level rules), their criteria, and the ones to show."""
-    domains: dict[Slot, list[Candidate]] = {s: [] for s in Slot}
+    domains: dict[Slot, list[Candidate]] = {s: [] for s in RECOMMEND_SLOTS}
     for candidate in candidates:
-        for slot in Slot:
+        for slot in RECOMMEND_SLOTS:
             if slot.category == candidate.part.component.category and part_allowed(purpose, slot, candidate, entry):
                 domains[slot].append(candidate)
-    optional = tuple(s for s in Slot if may_be_empty(purpose, s, entry))
+    optional = tuple(s for s in RECOMMEND_SLOTS if may_be_empty(purpose, s, entry))
     rule = partial(pair_allowed, purpose, entry=entry)
 
     # A large catalog makes too many builds to list; keep the best parts of each slot first.

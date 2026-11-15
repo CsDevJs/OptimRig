@@ -47,16 +47,22 @@ class Category(str, enum.Enum):
 
 
 class Slot(str, enum.Enum):
-    """A place in a build: one per category, plus an optional second drive.
+    """A place in a build: one per category, plus extra RAM kits (ram2-ram4) and drives
+    (storage2-storage4).
 
     Values equal the category values (Slot.CPU == Category.CPU == "cpu"), so a dict
     keyed by slots can be read with categories."""
     CPU = "cpu"
     MOTHERBOARD = "motherboard"
     RAM = "ram"
+    RAM2 = "ram2"
+    RAM3 = "ram3"
+    RAM4 = "ram4"
     GPU = "gpu"
     STORAGE = "storage"
     STORAGE2 = "storage2"
+    STORAGE3 = "storage3"
+    STORAGE4 = "storage4"
     PSU = "psu"
     CASE = "case"
     COOLER = "cooler"
@@ -64,10 +70,14 @@ class Slot(str, enum.Enum):
     @property
     def category(self) -> "Category":
         """The component category a part in this slot belongs to."""
-        return Category.STORAGE if self is Slot.STORAGE2 else Category(self.value)
+        return Category(self.value.rstrip("234"))
 
 
 SLOTS = tuple(Slot)
+RAM_SLOTS = (Slot.RAM, Slot.RAM2, Slot.RAM3, Slot.RAM4)
+STORAGE_SLOTS = (Slot.STORAGE, Slot.STORAGE2, Slot.STORAGE3, Slot.STORAGE4)
+# The recommender builds one RAM kit and at most two drives; the extra slots are manual-only.
+RECOMMEND_SLOTS = tuple(s for s in Slot if s not in (Slot.RAM2, Slot.RAM3, Slot.RAM4, Slot.STORAGE3, Slot.STORAGE4))
 SLOT_VALUES = tuple(s.value for s in Slot)
 
 
