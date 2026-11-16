@@ -32,6 +32,8 @@ from app.services.store_pages import PageParseError, parse_product_page
 
 USER_AGENT = "PC-Configurator-student-project/0.1 (+https://github.com/CsDevJs/PC-Configurator)"
 SECONDS_BETWEEN_REQUESTS_PER_STORE = 2.0
+# A full run takes an hour or more; a line every this many offers shows it is alive.
+PROGRESS_EVERY = 100
 # A store is "broken" when more than this share of its offers failed or disappeared
 # (404/410) in this run. Pages that were already gone at the previous check don't count:
 # discontinued products are expected and pile up over time, but many pages vanishing
@@ -157,7 +159,8 @@ def main() -> None:
             by_store.setdefault(offer.store.slug, []).append(offer)
         queue = [o for group in zip_longest(*by_store.values()) for o in group if o is not None]
 
-        for offer in queue:
+        started = time.monotonic()
+        for done, offer in enumerate(queue, start=1):
             store = offer.store.slug
             site = "{0.scheme}://{0.netloc}".format(urlsplit(offer.url))
             if site not in robots:
@@ -177,6 +180,9 @@ def main() -> None:
             offer.last_check_status = status
             db.commit()
             counts[status] += 1
+            if done % PROGRESS_EVERY == 0 and done < len(queue):
+                print(f"  {done} / {len(queue)} checked after {(time.monotonic() - started) / 60:.0f} min "
+                      f"({counts['failed']} failed, {counts['page_gone']} page gone)", flush=True)
             label = f"{offer.store.name:12} {offer.component.slug}"
             if status != "ok":
                 report.append(f"  FAILED  {label}: {'; '.join(details)}")
@@ -184,6 +190,7 @@ def main() -> None:
                 counts["changed"] += 1
                 report.append(f"  changed {label}: {', '.join(details)}")
 
+        print("\nChanges and failures:")
         print("\n".join(report) if report else "  no changes")
         print(f"Done: {counts['ok']} ok ({counts['changed']} changed), "
               f"{counts['failed']} failed, {counts['page_gone']} page gone.")
