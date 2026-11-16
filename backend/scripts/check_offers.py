@@ -2,14 +2,19 @@
 
 Usage (from backend/):  python -m scripts.check_offers
 
-Run it whenever you want fresh data; nothing runs automatically. It is polite to
-the stores: it follows their robots.txt, sends at most one request every
-2 seconds to each store, and identifies itself in the User-Agent.
+Run it whenever you want fresh data; .github/workflows/check-offers.yml also runs it
+twice a day. It is polite to the stores: it follows their robots.txt, sends at most
+one request every 2 seconds to each store, and identifies itself in the User-Agent.
 
 If a page can't be read, that offer keeps its previous values and is marked
 'failed' ('page_gone' for 404/410), so a broken page never erases good data.
+
+A few failed pages are normal and the run still exits with 0. It exits with 1 when a
+store looks broken (see broken_stores): the sign that the store changed its page
+layout or is blocking the checker, which a person has to look at.
 """
 
+import sys
 import time
 from datetime import date
 from itertools import zip_longest
@@ -27,6 +32,26 @@ from app.services.store_pages import PageParseError, parse_product_page
 
 USER_AGENT = "PC-Configurator-student-project/0.1 (+https://github.com/CsDevJs/PC-Configurator)"
 SECONDS_BETWEEN_REQUESTS_PER_STORE = 2.0
+# A store is "broken" when more than this share of its offers failed or disappeared
+# (404/410) in this run. Pages that were already gone at the previous check don't count:
+# discontinued products are expected and pile up over time, but many pages vanishing
+# at once means the store changed its addresses.
+MAX_FAILED_SHARE_PER_STORE = 0.20
+# ...but never on fewer failures than this, so a store with a handful of offers
+# doesn't raise the alarm over one or two odd pages.
+MIN_FAILED_TO_ALARM = 5
+
+
+def broken_stores(by_store: dict[str, dict[str, int]]) -> list[str]:
+    """One line per store whose failures pass both limits above. `by_store` maps a store's
+    name to its counts per status: 'ok', 'failed', 'page_gone' (was already gone at the
+    previous check) and 'newly_gone' (gone since this run)."""
+    lines = []
+    for store, counts in by_store.items():
+        failed, checked = counts.get("failed", 0) + counts.get("newly_gone", 0), sum(counts.values())
+        if failed >= MIN_FAILED_TO_ALARM and failed > MAX_FAILED_SHARE_PER_STORE * checked:
+            lines.append(f"{store}: {failed} of {checked} offers failed or disappeared ({failed / checked:.0%})")
+    return lines
 
 
 def _robots(client: httpx.Client, site: str) -> RobotFileParser:
@@ -122,6 +147,7 @@ def main() -> None:
         robots = {}
         last_request: dict[str, float] = {}
         counts = {"ok": 0, "failed": 0, "page_gone": 0, "changed": 0}
+        per_store: dict[str, dict[str, int]] = {}
         report: list[str] = []
         print(f"Checking {len(offers)} offers...")
 
@@ -145,6 +171,9 @@ def main() -> None:
                 last_request[store] = time.monotonic()
                 status, details = check_offer_safely(client, offer)
 
+            tally = "newly_gone" if status == "page_gone" and offer.last_check_status != "page_gone" else status
+            store_counts = per_store.setdefault(offer.store.name, {})
+            store_counts[tally] = store_counts.get(tally, 0) + 1
             offer.last_check_status = status
             db.commit()
             counts[status] += 1
@@ -158,6 +187,12 @@ def main() -> None:
         print("\n".join(report) if report else "  no changes")
         print(f"Done: {counts['ok']} ok ({counts['changed']} changed), "
               f"{counts['failed']} failed, {counts['page_gone']} page gone.")
+
+    broken = broken_stores(per_store)
+    if broken:
+        print("\nToo many failures; the store changed its page layout or addresses, or it is blocking the checker:")
+        print("\n".join(f"  {line}" for line in broken))
+        sys.exit(1)
 
 
 if __name__ == "__main__":

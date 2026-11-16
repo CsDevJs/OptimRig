@@ -151,6 +151,30 @@ def test_network_error_is_a_failure():
     assert status == "failed" and "ConnectError" in details[0]
 
 
+# ---------- When the run fails (exit 1) ----------
+
+def test_a_few_failures_are_not_an_alarm():
+    assert check_offers.broken_stores({
+        "Darwin": {"ok": 480, "failed": 20, "page_gone": 60},  # 4% failed
+        "Tiny": {"ok": 2, "failed": 4},  # most failed, but under MIN_FAILED_TO_ALARM
+        "Gone": {"ok": 10, "page_gone": 90},  # discontinued products are not failures
+        "Trim": {"ok": 95, "newly_gone": 5},  # a few products dropped since the last check
+    }) == []
+
+
+def test_a_store_whose_pages_stopped_parsing_is_reported():
+    assert check_offers.broken_stores({
+        "Darwin": {"ok": 500},
+        "Ultra": {"ok": 60, "failed": 40},
+        "Xstore": {"failed": 300},
+        "Moved": {"ok": 10, "page_gone": 20, "newly_gone": 70},  # the store changed its addresses
+    }) == [
+        "Ultra: 40 of 100 offers failed or disappeared (40%)",
+        "Xstore: 300 of 300 offers failed or disappeared (100%)",
+        "Moved: 70 of 100 offers failed or disappeared (70%)",
+    ]
+
+
 # ---------- API shows sales ----------
 
 def test_component_offers_show_sales(catalog_client):

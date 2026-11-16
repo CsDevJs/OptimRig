@@ -1,0 +1,61 @@
+# Refreshes every offer's price, sale price and stock from the stores' product pages
+# (backend/scripts/check_offers.py), twice a day and when started by hand
+# (Actions > Check store offers > Run workflow).
+#
+# It runs on GitHub's machine and only writes small row updates to the database, so the
+# site on Vercel is not slowed down. A page that can't be read keeps its old values.
+# The run fails, and GitHub emails you, when a whole store looks broken (page layout
+# changed, or the store blocks the checker): see broken_stores in check_offers.py.
+#
+# Needs one repository secret: DATABASE_URL, the production database address
+# (Settings > Secrets and variables > Actions > New repository secret).
+name: Check store offers
+
+on:
+  schedule:
+    # 06:17 and 16:17 in Chisinau during winter (UTC+2); an hour later in summer.
+    - cron: '17 4,14 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never two checks at once: a second one waits for the first to finish.
+concurrency:
+  group: check-offers
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - run: pip install -r requirements-crawl.txt
+
+      - name: Check every offer
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Connect like the site on Vercel does (works with Neon's pooled address).
+          DATABASE_POOLED: 'true'
+          PYTHONUNBUFFERED: '1'
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::The DATABASE_URL repository secret is not set."
+            exit 1
+          fi
+          # The settings require these two, but the checker never logs anyone in or opens
+          # the users vault, so throwaway values are generated instead of the real secrets.
+          export JWT_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          export VAULT_KEY="$(python -c 'import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())')"
+          python -m scripts.check_offers
