@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # Accounts that may open the admin page (/admin), comma-separated emails. Empty: nobody.
     admin_emails: str = ""
 
+    # True when DATABASE_URL goes through a connection pooler (Neon's pooled address,
+    # PgBouncer) and the process shouldn't hold connections of its own: see app/db/session.py.
+    database_pooled: bool = ON_VERCEL
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip().rstrip("/") for o in self.cors_origins.split(",") if o.strip()]
