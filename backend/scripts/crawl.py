@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-USER_AGENT = "PC-Configurator-student-project/0.1 (+https://github.com/CsDevJs/PC-Configurator)"
+USER_AGENT = "PC-Configurator-student-project/0.1 (+https://github.com/CsDevJs/OptimRig)"
 SECONDS_BETWEEN_REQUESTS = 2.0
 CACHE = Path(__file__).resolve().parent.parent / ".crawl-cache"
 

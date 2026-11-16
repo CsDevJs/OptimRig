@@ -25,7 +25,7 @@ from app.db.models import Offer
 from app.db.session import SessionLocal
 from app.services.store_pages import PageParseError, parse_product_page
 
-USER_AGENT = "PC-Configurator-student-project/0.1 (+https://github.com/CsDevJs/PC-Configurator)"
+USER_AGENT = "PC-Configurator-student-project/0.1 (+https://github.com/CsDevJs/OptimRig)"
 SECONDS_BETWEEN_REQUESTS_PER_STORE = 2.0
 
 
