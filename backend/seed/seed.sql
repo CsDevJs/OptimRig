@@ -6,6 +6,8 @@
 --   * or paste this whole file into pgAdmin's Query Tool (connected to pc_configurator) and press F5.
 -- Safe to re-run: every row is upserted by its natural key (slug, or component + store for offers).
 -- Parts and specs: edit the rows here and run the file again.
+-- perf_score: the estimates below hold only until a catalog load gives the part its PassMark
+-- score (one scale for every CPU and GPU); re-running this file never overwrites a PassMark score.
 -- Prices, sales and stock: the prices below are only the starting values for NEW offers.
 -- For offers that already exist, `python -m scripts.check_offers` keeps them up to date,
 -- and re-running this file does not overwrite them (it only updates the URL).
@@ -36,8 +38,8 @@ ON CONFLICT (slug) DO UPDATE SET
     tier = EXCLUDED.tier,
     brand = EXCLUDED.brand,
     model = EXCLUDED.model,
-    perf_score = EXCLUDED.perf_score,
-    perf_source = EXCLUDED.perf_source,
+    perf_score = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_score ELSE EXCLUDED.perf_score END,
+    perf_source = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_source ELSE EXCLUDED.perf_source END,
     power_draw_w = EXCLUDED.power_draw_w,
     release_year = EXCLUDED.release_year,
     updated_at = now();
@@ -73,8 +75,8 @@ ON CONFLICT (slug) DO UPDATE SET
     tier = EXCLUDED.tier,
     brand = EXCLUDED.brand,
     model = EXCLUDED.model,
-    perf_score = EXCLUDED.perf_score,
-    perf_source = EXCLUDED.perf_source,
+    perf_score = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_score ELSE EXCLUDED.perf_score END,
+    perf_source = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_source ELSE EXCLUDED.perf_source END,
     power_draw_w = EXCLUDED.power_draw_w,
     release_year = EXCLUDED.release_year,
     updated_at = now();
@@ -110,8 +112,8 @@ ON CONFLICT (slug) DO UPDATE SET
     tier = EXCLUDED.tier,
     brand = EXCLUDED.brand,
     model = EXCLUDED.model,
-    perf_score = EXCLUDED.perf_score,
-    perf_source = EXCLUDED.perf_source,
+    perf_score = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_score ELSE EXCLUDED.perf_score END,
+    perf_source = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_source ELSE EXCLUDED.perf_source END,
     power_draw_w = EXCLUDED.power_draw_w,
     release_year = EXCLUDED.release_year,
     updated_at = now();
@@ -143,8 +145,8 @@ ON CONFLICT (slug) DO UPDATE SET
     tier = EXCLUDED.tier,
     brand = EXCLUDED.brand,
     model = EXCLUDED.model,
-    perf_score = EXCLUDED.perf_score,
-    perf_source = EXCLUDED.perf_source,
+    perf_score = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_score ELSE EXCLUDED.perf_score END,
+    perf_source = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_source ELSE EXCLUDED.perf_source END,
     power_draw_w = EXCLUDED.power_draw_w,
     release_year = EXCLUDED.release_year,
     updated_at = now();
@@ -178,8 +180,8 @@ ON CONFLICT (slug) DO UPDATE SET
     tier = EXCLUDED.tier,
     brand = EXCLUDED.brand,
     model = EXCLUDED.model,
-    perf_score = EXCLUDED.perf_score,
-    perf_source = EXCLUDED.perf_source,
+    perf_score = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_score ELSE EXCLUDED.perf_score END,
+    perf_source = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_source ELSE EXCLUDED.perf_source END,
     power_draw_w = EXCLUDED.power_draw_w,
     release_year = EXCLUDED.release_year,
     updated_at = now();
@@ -212,8 +214,8 @@ ON CONFLICT (slug) DO UPDATE SET
     tier = EXCLUDED.tier,
     brand = EXCLUDED.brand,
     model = EXCLUDED.model,
-    perf_score = EXCLUDED.perf_score,
-    perf_source = EXCLUDED.perf_source,
+    perf_score = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_score ELSE EXCLUDED.perf_score END,
+    perf_source = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_source ELSE EXCLUDED.perf_source END,
     power_draw_w = EXCLUDED.power_draw_w,
     release_year = EXCLUDED.release_year,
     updated_at = now();
@@ -245,8 +247,8 @@ ON CONFLICT (slug) DO UPDATE SET
     tier = EXCLUDED.tier,
     brand = EXCLUDED.brand,
     model = EXCLUDED.model,
-    perf_score = EXCLUDED.perf_score,
-    perf_source = EXCLUDED.perf_source,
+    perf_score = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_score ELSE EXCLUDED.perf_score END,
+    perf_source = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_source ELSE EXCLUDED.perf_source END,
     power_draw_w = EXCLUDED.power_draw_w,
     release_year = EXCLUDED.release_year,
     updated_at = now();
@@ -279,8 +281,8 @@ ON CONFLICT (slug) DO UPDATE SET
     tier = EXCLUDED.tier,
     brand = EXCLUDED.brand,
     model = EXCLUDED.model,
-    perf_score = EXCLUDED.perf_score,
-    perf_source = EXCLUDED.perf_source,
+    perf_score = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_score ELSE EXCLUDED.perf_score END,
+    perf_source = CASE WHEN components.perf_source LIKE 'PassMark%' THEN components.perf_source ELSE EXCLUDED.perf_source END,
     power_draw_w = EXCLUDED.power_draw_w,
     release_year = EXCLUDED.release_year,
     updated_at = now();
