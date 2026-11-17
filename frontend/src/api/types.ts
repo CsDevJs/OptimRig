@@ -6,10 +6,10 @@ export type Category = (typeof CATEGORIES)[number]
 export type Tier = 'low' | 'mid' | 'high'
 export type Availability = 'in_stock' | 'on_order' | 'out_of_stock'
 
-/** A place in a build: one per category, plus an optional second drive. */
-export type Slot = Category | 'storage2'
+/** A place in a build: one per category, plus up to three extra RAM kits and three extra drives. */
+export type Slot = Category | 'ram2' | 'ram3' | 'ram4' | 'storage2' | 'storage3' | 'storage4'
 /** The component category a slot takes its parts from. */
-export const slotCategory = (slot: Slot): Category => (slot === 'storage2' ? 'storage' : slot)
+export const slotCategory = (slot: Slot): Category => slot.replace(/\d$/, '') as Category
 
 /** One chosen component ID per slot. */
 export type Selection = Partial<Record<Slot, number>>

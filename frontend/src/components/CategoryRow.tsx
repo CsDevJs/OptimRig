@@ -2,7 +2,7 @@ import { Check, ChevronDown, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { slotCategory, type Component, type Slot, type SpecValue } from '../api/types'
-import { CATEGORY_INFO, cheapestOffer, ORDER } from '../lib/catalog'
+import { CATEGORY_INFO, cheapestOffer } from '../lib/catalog'
 import { PartLabel } from './PartLabel'
 import { PriceTag } from './PriceTag'
 
@@ -36,6 +36,8 @@ function searchParts(parts: Component[], query: string): Component[] {
 
 interface Props {
   category: Slot
+  /** Position in the list of rows shown, from 1. */
+  number: number
   options: Component[]
   /** IDs that AC-3 says still fit; null = not filtered (auto-compat off or still loading). */
   allowed: Set<number> | null
@@ -48,10 +50,12 @@ interface Props {
   onClose: () => void
   onPick: (id: number) => void
   onClear: () => void
+  /** Extra RAM kits and drives can be taken out of the build, row and all. */
+  onRemove?: () => void
 }
 
 export function CategoryRow(props: Props) {
-  const { category, options, allowed, loadingAllowed, selected, specs, severity, open, onToggle, onClose, onPick, onClear } = props
+  const { category, number, options, allowed, loadingAllowed, selected, specs, severity, open, onToggle, onClose, onPick, onClear, onRemove } = props
   const { title, short, icon: Icon, accent } = CATEGORY_INFO[category]
   const box = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState('')
@@ -85,7 +89,13 @@ export function CategoryRow(props: Props) {
         <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center">
           <Icon size={14} className={accent} />
         </div>
-        <span className="text-xs font-bold text-white">{ORDER.indexOf(category) + 1}. {title}</span>
+        <span className="text-xs font-bold text-white">{number}. {title}</span>
+        {onRemove && (
+          <button type="button" onClick={onRemove} aria-label={`Elimină ${short}`} title={`Elimină ${short}`}
+            className="w-6 h-6 rounded-md border border-slate-700 text-slate-400 hover:text-red-300 hover:border-red-400/60 transition flex items-center justify-center">
+            <X size={12} />
+          </button>
+        )}
       </div>
 
       <div className="relative w-full sm:w-[400px] lg:w-[470px] min-w-0">

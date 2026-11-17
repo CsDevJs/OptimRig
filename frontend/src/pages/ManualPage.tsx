@@ -1,4 +1,4 @@
-import { Eraser } from 'lucide-react'
+import { Eraser, Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -9,9 +9,14 @@ import { useBuilder } from '../builder/BuilderContext'
 import { CategoryRow } from '../components/CategoryRow'
 import { ManualSummary } from '../components/ManualSummary'
 import { useToast } from '../context/ToastContext'
-import { ORDER } from '../lib/catalog'
+import { MULTI_SLOTS, ORDER } from '../lib/catalog'
 
 const AUTO_KEY = 'pc-configurator-auto-compat'
+
+type Group = keyof typeof MULTI_SLOTS
+const GROUPS = Object.keys(MULTI_SLOTS) as Group[]
+const groupOf = (slot: Slot): Group | null => GROUPS.find((g) => (MULTI_SLOTS[g] as readonly Slot[]).includes(slot)) ?? null
+const ADD_LABEL: Record<Group, string> = { ram: 'Adaugă memorie RAM', storage: 'Adaugă stocare' }
 
 export function ManualPage() {
   const builder = useBuilder()
@@ -57,6 +62,37 @@ export function ManualPage() {
     }
     return worst
   }, [compatibility])
+
+  // Extra RAM kits and drives: rows the user added (possibly still empty), and at least
+  // every one that holds a part, e.g. from a loaded build.
+  const [added, setAdded] = useState<Record<Group, number>>({ ram: 0, storage: 0 })
+  const extras = (g: Group) => {
+    const filled = MULTI_SLOTS[g].reduce((last, slot, i) => (selection[slot] ? i : last), 0)
+    return Math.max(added[g], filled)
+  }
+  const visible = ORDER.filter((slot) => {
+    const g = groupOf(slot)
+    return !g || (MULTI_SLOTS[g] as readonly Slot[]).indexOf(slot) <= extras(g)
+  })
+  const addRow = (g: Group) => {
+    const next = extras(g) + 1
+    setAdded((a) => ({ ...a, [g]: next }))
+    setOpen(MULTI_SLOTS[g][next])
+  }
+  // Taking a row out moves the kits or drives below it up one row, so the rows stay numbered 2, 3, 4.
+  const removeRow = (slot: Slot) => {
+    const g = groupOf(slot)!
+    const slots = MULTI_SLOTS[g]
+    const next: Selection = { ...selection }
+    for (let i = slots.indexOf(slot as never); i < slots.length; i++) {
+      const below = selection[slots[i + 1]]
+      if (below) next[slots[i]] = below
+      else delete next[slots[i]]
+    }
+    builder.replace(next, build)
+    setAdded((a) => ({ ...a, [g]: extras(g) - 1 }))
+    setOpen(null)
+  }
 
   const psuWatts = selection.psu ? Number(specs.get(selection.psu)?.wattage ?? 0) || null : null
   const closeRow = useCallback(() => setOpen(null), [])
@@ -110,7 +146,7 @@ export function ManualPage() {
             Compatibilitate auto
           </label>
           {Object.keys(selection).length > 0 && (
-            <button type="button" onClick={() => builder.replace({})}
+            <button type="button" onClick={() => { builder.replace({}); setAdded({ ram: 0, storage: 0 }) }}
               className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-slate-300 hover:text-white hover:border-slate-500 transition flex items-center gap-1.5">
               <Eraser size={13} /> {build ? 'Build nou' : 'Golește'}
             </button>
@@ -120,27 +156,45 @@ export function ManualPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         <div className="lg:col-span-8 space-y-3">
-          {ORDER.map((category) => {
+          {visible.map((category, index) => {
             const id = selection[category]
+            const g = groupOf(category)
+            const last = g !== null && category === MULTI_SLOTS[g][extras(g)]
+            // Only once the first kit or drive is chosen, and while there is room for another.
+            const addButton = last && !!selection[MULTI_SLOTS[g][0]] && extras(g) < MULTI_SLOTS[g].length - 1 && (
+              <button type="button" onClick={() => addRow(g)}
+                className="px-3 py-1.5 rounded-lg bg-violet-500/80 hover:bg-violet-400 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md">
+                <Plus size={13} /> {ADD_LABEL[g]}
+              </button>
+            )
             if (!catalog && id) {
-              return <div key={category} className="slate-glow-card rounded-xl p-4"><span className="skeleton w-2/3" /></div>
+              return (
+                <div key={category} className="space-y-2">
+                  <div className="slate-glow-card rounded-xl p-4"><span className="skeleton w-2/3" /></div>
+                  {addButton}
+                </div>
+              )
             }
             return (
-              <CategoryRow
-                key={category}
-                category={category}
-                options={(catalog ?? []).filter((c) => c.category === slotCategory(category))}
-                allowed={allowed}
-                loadingAllowed={open === category && loadingAllowed}
-                selected={id ? byId.get(id) ?? null : null}
-                specs={specs}
-                severity={id ? severity.get(id) ?? null : null}
-                open={open === category}
-                onToggle={() => setOpen((o) => (o === category ? null : category))}
-                onClose={closeRow}
-                onPick={(pick) => { builder.choose(category, pick); setOpen(null) }}
-                onClear={() => { builder.remove(category); setOpen(null) }}
-              />
+              <div key={category} className="space-y-2">
+                <CategoryRow
+                  category={category}
+                  number={index + 1}
+                  options={(catalog ?? []).filter((c) => c.category === slotCategory(category))}
+                  allowed={allowed}
+                  loadingAllowed={open === category && loadingAllowed}
+                  selected={id ? byId.get(id) ?? null : null}
+                  specs={specs}
+                  severity={id ? severity.get(id) ?? null : null}
+                  open={open === category}
+                  onToggle={() => setOpen((o) => (o === category ? null : category))}
+                  onClose={closeRow}
+                  onPick={(pick) => { builder.choose(category, pick); setOpen(null) }}
+                  onClear={() => { builder.remove(category); setOpen(null) }}
+                  onRemove={g && category !== MULTI_SLOTS[g][0] ? () => removeRow(category) : undefined}
+                />
+                {addButton}
+              </div>
             )
           })}
         </div>

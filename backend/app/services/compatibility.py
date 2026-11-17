@@ -11,7 +11,7 @@ from typing import TypeVar
 from app.compatibility_schemas import CompatibilityIssue, CompatibilityResult
 from app.db.models import (
     Base, CaseSpec, Category, Component, CoolerSpec, CpuSpec, GpuSpec,
-    MotherboardSpec, PsuSpec, RamSpec, Slot, StorageSpec,
+    MotherboardSpec, PsuSpec, RamSpec, RAM_SLOTS, STORAGE_SLOTS, Slot, StorageSpec,
 )
 
 
@@ -199,7 +199,18 @@ def check_pair(left: SelectedPart, right: SelectedPart) -> tuple[list[str], list
     The final bool indicates missing data: such a pair must not be pruned as if
     it were a proven conflict. The AC-3 service uses these binary checks.
     """
-    report = _pair_report({left.component.category: left, right.component.category: right})
+    if left.component.category == right.component.category:
+        # Two parts of one category: extra RAM kits or extra drives.
+        report = RuleReport({})
+        if isinstance(left.spec, RamSpec) and isinstance(right.spec, RamSpec):
+            report.checked.append("ram_kits_memory")
+            if left.spec.memory_type != right.spec.memory_type:
+                report.issues.append(CompatibilityIssue(
+                    code="ram_kits_memory", severity="error",
+                    message=f"Kiturile RAM sunt de tipuri diferite ({left.spec.memory_type} și {right.spec.memory_type}).",
+                    component_ids=[left.component.id, right.component.id]))
+    else:
+        report = _pair_report({left.component.category: left, right.component.category: right})
     report.unknown |= left.spec is None or right.spec is None
     return report.checked, report.issues, report.unknown
 
@@ -209,7 +220,7 @@ def _on_m2(storage: StorageSpec) -> bool:
 
 
 def check_build(parts: dict[Slot, SelectedPart]) -> CompatibilityResult:
-    """`parts` is keyed by slot; Slot.STORAGE2 is an optional second drive."""
+    """`parts` is keyed by slot; ram2-ram4 and storage2-storage4 are extra kits and drives."""
     report = RuleReport(parts)
     for category in Slot:
         if category not in parts:
@@ -236,19 +247,31 @@ def check_build(parts: dict[Slot, SelectedPart]) -> CompatibilityResult:
             required.add(Category.COOLER)
     missing = [category for category in Category if category in required and category not in parts]
 
-    # Each drive was checked against the board on its own; two drives also need two connectors.
+    # Each kit and drive was checked against the board on its own; together they
+    # also need enough memory slots, memory capacity and drive connectors.
     board = _spec(parts, Category.MOTHERBOARD, MotherboardSpec)
-    drives = [p.spec for slot, p in parts.items() if slot in (Slot.STORAGE, Slot.STORAGE2) and isinstance(p.spec, StorageSpec)]
-    if board and len(drives) == 2:
+    kits = [s for s in RAM_SLOTS if s in parts and isinstance(parts[s].spec, RamSpec)]
+    if board and len(kits) > 1:
+        modules = sum(parts[s].spec.modules for s in kits)
+        capacity = sum(parts[s].spec.capacity_gb for s in kits)
+        report.check("ram_slots_total", modules <= board.memory_slots,
+                     f"Kiturile RAM au împreună {modules} module; placa de bază are {board.memory_slots} sloturi.",
+                     Category.MOTHERBOARD, *kits)
+        report.check("ram_capacity_total", capacity <= board.max_memory_gb,
+                     f"Kiturile RAM au împreună {capacity} GB; placa de bază suportă cel mult {board.max_memory_gb} GB.",
+                     Category.MOTHERBOARD, *kits)
+    drive_slots = [s for s in STORAGE_SLOTS if s in parts and isinstance(parts[s].spec, StorageSpec)]
+    drives = [parts[s].spec for s in drive_slots]
+    if board and len(drives) > 1:
         m2 = sum(_on_m2(d) for d in drives)
         if m2:
             report.check("storage_m2_count", board.m2_slots >= m2,
                          f"Cele {m2} SSD-uri M.2 au nevoie de {m2} sloturi M.2; placa de bază are {board.m2_slots}.",
-                         Category.MOTHERBOARD, Slot.STORAGE, Slot.STORAGE2)
+                         Category.MOTHERBOARD, *drive_slots)
         if len(drives) - m2:
             report.check("storage_sata_count", board.sata_ports >= len(drives) - m2,
                          f"Unitățile SATA au nevoie de {len(drives) - m2} porturi SATA; placa de bază are {board.sata_ports}.",
-                         Category.MOTHERBOARD, Slot.STORAGE, Slot.STORAGE2)
+                         Category.MOTHERBOARD, *drive_slots)
 
     # PSU wattage is capacity, not consumption. Selected parts only: a partial
     # build's estimate is a lower bound, not an estimate for a finished PC.

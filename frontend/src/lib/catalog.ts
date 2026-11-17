@@ -5,16 +5,30 @@ import {
 import type { Category, Component, Offer, Slot, SpecValue } from '../api/types'
 
 /** Slot order and labels follow the design's manual configurator. */
-export const ORDER: Slot[] = ['cpu', 'cooler', 'motherboard', 'ram', 'gpu', 'storage', 'storage2', 'psu', 'case']
+export const ORDER: Slot[] = [
+  'cpu', 'cooler', 'motherboard', 'ram', 'ram2', 'ram3', 'ram4', 'gpu',
+  'storage', 'storage2', 'storage3', 'storage4', 'psu', 'case',
+]
+
+/** Slots a build can hold several of: the first is always shown, the rest are added by hand. */
+export const MULTI_SLOTS = {
+  ram: ['ram', 'ram2', 'ram3', 'ram4'],
+  storage: ['storage', 'storage2', 'storage3', 'storage4'],
+} as const satisfies Record<string, readonly Slot[]>
 
 export const CATEGORY_INFO: Record<Slot, { title: string; short: string; icon: LucideIcon; accent: string }> = {
   cpu: { title: 'Procesor', short: 'CPU', icon: Cpu, accent: 'text-violet-300' },
   cooler: { title: 'Cooler', short: 'cooler', icon: Fan, accent: 'text-sky-300' },
   motherboard: { title: 'Placă de bază', short: 'placă de bază', icon: CircuitBoard, accent: 'text-white' },
   ram: { title: 'Memorie RAM', short: 'RAM', icon: MemoryStick, accent: 'text-pink-300' },
+  ram2: { title: 'Memorie RAM 2', short: 'RAM 2', icon: MemoryStick, accent: 'text-pink-300' },
+  ram3: { title: 'Memorie RAM 3', short: 'RAM 3', icon: MemoryStick, accent: 'text-pink-300' },
+  ram4: { title: 'Memorie RAM 4', short: 'RAM 4', icon: MemoryStick, accent: 'text-pink-300' },
   gpu: { title: 'Placă video', short: 'GPU', icon: Gpu, accent: 'text-pink-300' },
   storage: { title: 'Stocare', short: 'stocare', icon: HardDrive, accent: 'text-sky-300' },
-  storage2: { title: 'Stocare 2 (opțional)', short: 'a doua unitate', icon: HardDrive, accent: 'text-sky-300' },
+  storage2: { title: 'Stocare 2', short: 'stocare 2', icon: HardDrive, accent: 'text-sky-300' },
+  storage3: { title: 'Stocare 3', short: 'stocare 3', icon: HardDrive, accent: 'text-sky-300' },
+  storage4: { title: 'Stocare 4', short: 'stocare 4', icon: HardDrive, accent: 'text-sky-300' },
   psu: { title: 'Sursă', short: 'sursă', icon: Zap, accent: 'text-violet-200' },
   case: { title: 'Carcasă', short: 'carcasă', icon: Box, accent: 'text-violet-300' },
 }

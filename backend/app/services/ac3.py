@@ -28,8 +28,9 @@ def filter_domains(domains):
     queued = set(queue)
     cache = {}
     def compatible(a, x, b, y):
-        key = (a, None if x is None else x.component.id,
-               b, None if y is None else y.component.id)
+        # Keyed by category: ram2 against the board gives the same answer as ram does.
+        key = (getattr(a, "category", a), None if x is None else x.component.id,
+               getattr(b, "category", b), None if y is None else y.component.id)
         if key not in cache:
             cache[key] = supported(a, x, b, y)
         return cache[key]

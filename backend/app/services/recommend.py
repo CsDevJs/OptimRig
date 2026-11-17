@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Literal
 
-from app.db.models import Category, CoolerSpec, Slot
+from app.db.models import RECOMMEND_SLOTS, Category, CoolerSpec, Slot
 from app.services.ac3 import filter_catalog, spec_signature as signature, supported
 from app.services.compatibility import SelectedPart, check_pair
 from app.services.topsis import TopsisScore, topsis
@@ -79,7 +79,7 @@ def compatible_builds(domains: dict[Slot, list[Candidate]], budget: Decimal,
     CPU allows it. A build is kept only when no pairwise rule fails or lacks data, the
     `extra` rules hold, two drives have two connectors, and the PSU covers the peak draw.
     """
-    order = list(Slot)
+    order = list(RECOMMEND_SLOTS)
     ac3_domains = {s: [x.part for x in domains.get(s, [])] + ([None] if s in optional else []) for s in order}
     filtered = filter_catalog(ac3_domains)
     by_id = {x.part.component.id: x for values in domains.values() for x in values}
@@ -199,13 +199,13 @@ def prefilter(domains: dict[Slot, list[Candidate]], budget: Decimal, purpose: Pu
        stay represented, and only parts that fit (compatibility and `extra`) at least one
        part already picked for each earlier slot.
     """
-    with_specs = {s: [x for x in domains.get(s, []) if x.part.spec is not None] for s in Slot}
+    with_specs = {s: [x for x in domains.get(s, []) if x.part.spec is not None] for s in RECOMMEND_SLOTS}
     cheapest = {s: min((x.cents for x in xs), default=0) for s, xs in with_specs.items()}
     for s in optional:
         cheapest[s] = 0  # may be left out
     limit = int(budget * 100)
     base = {s: pareto([x for x in with_specs[s] if x.cents <= limit - sum(v for c, v in cheapest.items() if c != s)])
-            for s in Slot}
+            for s in RECOMMEND_SLOTS}
     first = cheap_build(base, optional, extra)  # {} when no cheap build was found
     chains = [first] if first else []
     picked: dict[Slot, list[Candidate]] = {}

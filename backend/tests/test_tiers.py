@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from app.compatibility_schemas import CompatibilityRequest
 from app.db.models import (
+    RECOMMEND_SLOTS,
     Category, Component, CoolerSpec, CpuSpec, GpuSpec, MotherboardSpec, PsuSpec, RamSpec, Slot, StorageSpec,
 )
 from app.services.compatibility import SelectedPart, check_build
@@ -188,11 +189,11 @@ def test_builds_with_a_second_drive_match_brute_force():
         domains = {Slot(c.value): xs for c, xs in random_catalog(rng).items()}
         domains[Slot.STORAGE2] = list(domains[Slot.STORAGE])
         budget = D(rng.randint(10000, 40000))
-        found = {tuple(b[s].part.component.id if b.get(s) else None for s in Slot) for b in compatible_builds(domains, budget)}
+        found = {tuple(b[s].part.component.id if b.get(s) else None for s in RECOMMEND_SLOTS) for b in compatible_builds(domains, budget)}
         expected = set()
-        options = [domains[s] + ([None] if s in (Slot.GPU, Slot.COOLER, Slot.STORAGE2) else []) for s in Slot]
+        options = [domains[s] + ([None] if s in (Slot.GPU, Slot.COOLER, Slot.STORAGE2) else []) for s in RECOMMEND_SLOTS]
         for combo in itertools.product(*options):
-            build = {s: x for s, x in zip(Slot, combo) if x is not None}
+            build = {s: x for s, x in zip(RECOMMEND_SLOTS, combo) if x is not None}
             if sum(x.price for x in build.values()) <= budget and \
                     check_build({s: x.part for s, x in build.items()}).status == "compatible":
                 expected.add(tuple(x.part.component.id if x else None for x in combo))
